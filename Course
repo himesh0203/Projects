@@ -1,0 +1,55 @@
+class CourseRecommender:
+    def __init__(self):
+        self.courses = {
+            "Engineering": ["Computer Science", "Mechanical", "Electrical", "Civil"],
+            "Medical": ["MBBS", "BDS", "Pharmacy"],
+            "Business": ["MBA", "BBA", "Finance", "Marketing"],
+            "Arts": ["Design", "Media", "Psychology", "Sociology"]
+        }
+
+        self.course_requirements = {
+            "Engineering": 80,
+            "Medical": 85,
+            "Business": 60,
+            "Arts": 50
+        }
+
+    def recommend_course(self, percentage, goal, interests):
+        recommended_courses = []
+        for field, courses in self.courses.items():
+            if percentage >= self.course_requirements[field]:
+                for course in courses:
+                    if course.lower() in [interest.lower() for interest in interests]:
+                        recommended_courses.append(course)
+        
+        if goal == "Job":
+            if percentage >= 80:
+                recommended_courses.extend(["Computer Science", "Mechanical", "Electrical"])
+            else:
+                recommended_courses.extend(["BBA", "Finance", "Marketing"])
+        
+        elif goal == "Higher Studies":
+            if percentage >= 85:
+                recommended_courses.extend(["MBBS", "MBA"])
+            else:
+                recommended_courses.extend(["Design", "Media", "Psychology"])
+
+        return list(set(recommended_courses))
+
+def main():
+    recommender = CourseRecommender()
+    percentage = float(input("Enter your percentage: "))
+    goal = input("Enter your goal (Job/Higher Studies): ")
+    interests = input("Enter your interests (comma separated): ").split(',')
+
+    recommended_courses = recommender.recommend_course(percentage, goal, interests)
+    
+    if recommended_courses:
+        print("Based on your percentage, goal, and interests, we recommend the following courses:")
+        for course in recommended_courses:
+            print(f"- {course}")
+    else:
+        print("Sorry, no courses match your criteria.")
+
+if __name__ == "__main__":
+    main()
