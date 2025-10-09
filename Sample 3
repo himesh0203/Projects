@@ -1,0 +1,149 @@
+Great! You're already using *Python* with *Flask* in this web app.
+
+Here’s a *step-by-step guide* to run your Flask app using *Python* only:
+
+---
+
+✅ *1. Install Flask (One-Time Setup)*
+
+In your terminal or command prompt, run:
+
+```bash
+pip install flask
+```
+
+---
+
+✅ *2. Save Your Python File*
+
+Create a file called *`app.py`* and paste this code:
+
+```python
+from flask import Flask, render_template, request
+
+app = Flask(_name_)
+
+def recommend_course(percentage, goal, interest):
+    if percentage < 40:
+        return "Focus on basic skill-building courses."
+
+    if goal == "job":
+        if interest == "computer":
+            return "BCA, BSc IT, or Software Development"
+        elif interest == "electronics":
+            return "Diploma or BSc in Electronics"
+        elif interest == "commerce":
+            return "BBA or BCom"
+        else:
+            return "Basic certification courses"
+
+    elif goal == "higher studies":
+        if interest == "math":
+            return "B.Tech CSE or Data Science"
+        elif interest == "biology":
+            return "BSc Biotech or Microbiology"
+        else:
+            return "BA/BSc in your subject"
+
+    elif goal == "business":
+        return "BBA or Entrepreneurship course"
+
+    else:
+        return "Enter valid goal and interest"
+
+
+
+
+
+
+<head><title>Result</title></head>
+<body>
+    <h2>Your Recommended Course:</h2>
+    <p>{{ course }}</p>
+    <a href="/">Back</a>
+</body>
+</html>
+```
+
+---
+
+▶️ *4. Run the App*
+
+In terminal:
+```bash
+python app.py
+```
+
+Open browser:  
+👉 `http://127.0.0.1:5000`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/recommend', methods=['POST'])
+def recommend():
+    percentage = float(request.form['percentage'])
+    goal = request.form['goal'].lower()
+    interest = request.form['interest'].lower()
+
+    course = recommend_course(percentage, goal, interest)
+    return render_template('result.html', course=course)
+
+if _name_ == '_main_':
+    app.run(debug=True)
+```
+
+---
+
+✅ *3. Create HTML Files*
+
+Inside your project folder, create a folder named *`templates`*, and inside it, add:
+
+`index.html`:
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Course Recommender</title></head>
+<body>
+    <h2>Course Recommendation</h2>
+    <form action="/recommend" method="post">
+        <label>Percentage:</label><br>
+        <input type="text" name="percentage"><br><br>
+        <label>Goal:</label><br>
+        <select name="goal">
+            <option value="job">Job</option>
+            <option value="higher studies">Higher Studies</option>
+            <option value="business">Business</option>
+        </select><br><br>
+        <label>Interest:</label><br>
+        <input type="text" name="interest"><br><br>
+        <input type="submit" value="Submit">
+    </form>
+</body>
+</html>
+```
+
+`result.html`:
+
+```html
+<!DOCTYPE html>
+<html>
