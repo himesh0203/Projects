@@ -1,0 +1,56 @@
+Python Code: Course Recommendation System*
+
+def recommend_course(percentage, goal, interests):
+    # Normalize inputs
+    goal = goal.lower()
+    interests = [i.lower() for i in interests]
+
+    # Define course options
+    courses = {
+        "engineering": ["Computer Science", "Mechanical", "Electrical", "Civil"],
+        "medical": ["MBBS", "BDS", "Pharmacy", "Nursing"],
+        "business": ["BBA", "Commerce", "Economics", "Finance"],
+        "arts": ["Psychology", "History", "Literature", "Sociology"],
+        "design": ["Graphic Design", "Fashion Design", "Interior Design"],
+        "technology": ["AI & ML", "Data Science", "Cybersecurity", "Web Development"]
+}
+
+    # Recommendation logic
+    if percentage>= 85:
+        level = "Top-tier"
+    elif percentage>= 70:
+        level = "Mid-tier"
+    else:
+        level = "Foundation-level"
+
+    # Match goal and interests
+    matched_courses = []
+    if goal in courses:
+        for course in courses[goal]:
+            for interest in interests:
+                if interest in course.lower():
+                    matched_courses.append(course)
+
+    # Fallback if no match found
+    if not matched_courses:
+        matched_courses = courses.get(goal, ["General Studies"])
+
+    # Output recommendation
+    print(f"\n🎓 Based on your {percentage}% score and interest in {', '.join(interests)},")
+    print(f"we recommend these {level} courses aligned with your goal of '{goal}':")
+    for course in matched_courses:
+        print(f"✅ {course}")
+
+# Example usage
+percentage = float(input("Enter your percentage: "))
+goal = input("Enter your career goal (e.g., engineering, medical, business, arts, design, technology): ")
+interests = input("Enter your subject interests (comma-separated): ").split(',')
+
+recommend_course(percentage, goal, interests)
+```
+
+*🛠 How It Works:*
+- You input your academic percentage, career goal, and subject interests.
+- The script matches your interests with relevant courses under your goal.
+- It also considers your percentage to suggest the appropriate level of course.
+
