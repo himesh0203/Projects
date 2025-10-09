@@ -1,0 +1,30 @@
+return "Recommended: BSc in BioTech, Microbiology, or Medical Science."
+        else:
+            return "Recommended: BA/BSc in your interest area, then plan for master's."
+
+    elif goal.lower() == "business":
+        return "Recommended: BBA, Entrepreneurship courses, or Bachelor of Management Studies."
+
+    else:
+        return "Please enter a valid goal (job, higher studies, business)."
+
+
+Input from user
+percentage = float(input("Enter your percentage: "))
+goal = input("What is your goal? (job / higher studies / business): ")
+interest = input("What subject are you interested in? (e.g., computer, biology, commerce): ")
+
+Output
+course = recommend_course(percentage, goal, interest)
+print("\n🎓 " + course)
+```
+
+---
+
+🧪 *Sample Run*
+```
+Enter your percentage: 78
+What is your goal? (job / higher studies / business): job
+What subject are you interested in? (e.g., computer, biology, commerce): computer
+
+🎓 Recommended: BCA, BSc IT, or Diploma in Software Development.
