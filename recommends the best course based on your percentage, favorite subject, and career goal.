@@ -1,0 +1,93 @@
+recommends the best course based on your percentage, favorite subject, and career goal.
+COURSES = {
+    "Computer Science": {
+        "subjects": ["Mathematics", "Physics", "Computer Science"],
+        "min_percentage": 75,
+        "goals": ["Software Development", "Data Science", "Cybersecurity"]
+    },
+    "Mechanical Engineering": {
+        "subjects": ["Mathematics", "Physics", "Chemistry"],
+        "min_percentage": 70,
+        "goals": ["Automotive Industry", "Robotics", "Manufacturing"]
+    },
+    "Biotechnology": {
+        "subjects": ["Biology", "Chemistry", "Physics"],
+        "min_percentage": 65,
+        "goals": ["Research", "Healthcare", "Pharmaceuticals"]
+    },
+    "Business Administration": {
+        "subjects": ["Commerce", "Economics", "Mathematics"],
+        "min_percentage": 60,
+        "goals": ["Management", "Finance", "Marketing"]
+    },
+    "Graphic Design": {
+        "subjects": ["Arts", "Computer Science"],
+        "min_percentage": 50,
+        "goals": ["Web Design", "Animation", "Advertising"]
+    },
+    "Civil Engineering": {
+        "subjects": ["Mathematics", "Physics", "Chemistry"],
+        "min_percentage": 65,
+        "goals": ["Construction", "Urban Planning", "Infrastructure"]
+    },
+    "Electrical Engineering": {
+        "subjects": ["Mathematics", "Physics", "Electrical Science"],
+        "min_percentage": 70,
+        "goals": ["Power Systems", "Electronics", "Telecommunication"]
+    },
+    "Environmental Science": {
+        "subjects": ["Biology", "Chemistry", "Environmental Studies"],
+        "min_percentage": 60,
+        "goals": ["Conservation", "Sustainability", "Research"]
+    },
+    "Hotel Management": {
+        "subjects": ["Commerce", "Management", "Communication"],
+        "min_percentage": 55,
+        "goals": ["Hospitality", "Event Management", "Tourism"]
+    },
+    "Fashion Designing": {
+        "subjects": ["Arts", "Design", "Communication"],
+        "min_percentage": 50,
+        "goals": ["Apparel Designing", "Costume Design", "Retail"]
+    }
+}
+
+def get_user_input():
+    print("Welcome to the Course Recommender!\n")
+    try:
+        percentage = float(input("Enter your last qualifying exam percentage: "))
+        fav_subject = input("What is your favorite subject? ").strip().title()
+        career_goal = input("What is your main career goal? ").strip().title()
+        return percentage, fav_subject, career_goal
+    except ValueError:
+        print("Invalid input for percentage. Please enter a number.")
+        return None, None, None
+
+def recommend_course(percentage, fav_subject, career_goal):
+    if percentage is None:
+        return
+
+    best_matches = []
+    for course, criteria in COURSES.items():
+        if percentage >= criteria["min_percentage"]:
+            subject_match = fav_subject in criteria["subjects"]
+            goal_match = career_goal in criteria["goals"]
+            score = 0
+            if subject_match:
+                score += 1
+            if goal_match:
+                score += 1
+            if score > 0:
+                best_matches.append((course, score))
+
+    if not best_matches:
+        print("\nSorry, no courses matched your criteria. Try other options or improve your percentage.")
+    else:
+        best_matches.sort(key=lambda x: x, reverse=True)
+        print("\nBased on your inputs, recommended courses are:")
+        for course, score in best_matches:
+            print(f"- {course}")
+
+if __name__ == "__main__":
+    pct, subj, goal = get_user_input()
+    recommend_course(pct, subj, goal)
