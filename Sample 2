@@ -1,0 +1,26 @@
+Here’s a simple *Python program* that suggests the best course for a student based on their *percentage*, *goal*, and *subject interest*.
+
+---
+
+✅ *Python Code: Course Recommendation System*
+
+```python
+def recommend_course(percentage, goal, interest):
+    if percentage < 40:
+        return "Focus on basic skill-building courses like communication, computer fundamentals, or vocational training."
+
+    # High percentage
+    if goal.lower() == "job":
+        if interest.lower() in ["computer", "it", "programming"]:
+            return "Recommended: BCA, BSc IT, or Diploma in Software Development."
+        elif interest.lower() in ["electronics", "hardware"]:
+            return "Recommended: Diploma in Electronics, BSc Electronics."
+        elif interest.lower() in ["commerce", "business"]:
+            return "Recommended: BBA, BCom with specialization in Digital Marketing or Finance."
+        else:
+            return "Recommended: Skill-based certifications (Data Entry, Tally, etc.)"
+    
+    elif goal.lower() == "higher studies":
+        if interest.lower() in ["math", "physics", "computer"]:
+            return "Recommended: B.Tech in CSE, IT, or Data Science."
+        elif interest.lower() in ["biology", "chemistry"]:
