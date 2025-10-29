@@ -1,0 +1,20 @@
+import tkinter as tk
+
+def on_button_click():
+    """Function to be called when the button is clicked."""
+    label.config(text="Hello from the GUI!")
+
+# Create the main window
+root = tk.Tk()
+root.title("Simple GUI")
+
+# Create a label widget
+label = tk.Label(root, text="Click the button below:")
+label.pack(pady=10)
+
+# Create a button widget
+button = tk.Button(root, text="Click Me", command=on_button_click)
+button.pack(pady=5)
+
+# Start the Tkinter event loop
+root.mainloop()
