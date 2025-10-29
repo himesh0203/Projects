@@ -1,0 +1,33 @@
+import pygame
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Simple Pygame Window")
+
+# Colors
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+
+# Game loop
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Fill the background
+    screen.fill(WHITE)
+
+    # Draw a red rectangle
+    pygame.draw.rect(screen, RED, (50, 50, 100, 100)) # (x, y, width, height)
+
+    # Update the display
+    pygame.display.flip()
+
+# Quit Pygame
+pygame.quit()
