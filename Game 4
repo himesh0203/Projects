@@ -1,0 +1,84 @@
+import pygame
+import random
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Collect the Dots")
+
+# Colors
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+
+# Player properties
+player_size = 50
+player_x = SCREEN_WIDTH // 2 - player_size // 2
+player_y = SCREEN_HEIGHT - player_size - 10
+player_speed = 5
+
+# Dot properties
+dot_size = 20
+dots = []
+for _ in range(5):  # Start with 5 dots
+    dots.append({
+        'x': random.randint(0, SCREEN_WIDTH - dot_size),
+        'y': random.randint(0, SCREEN_HEIGHT // 2),
+        'color': RED
+    })
+
+score = 0
+font = pygame.font.Font(None, 36)
+
+# Game loop
+running = True
+clock = pygame.time.Clock()
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT] and player_x > 0:
+        player_x -= player_speed
+    if keys[pygame.K_RIGHT] and player_x < SCREEN_WIDTH - player_size:
+        player_x += player_speed
+
+    # Check for collisions with dots
+    player_rect = pygame.Rect(player_x, player_y, player_size, player_size)
+    for dot in dots[:]:  # Iterate over a copy to allow modification
+        dot_rect = pygame.Rect(dot['x'], dot['y'], dot_size, dot_size)
+        if player_rect.colliderect(dot_rect):
+            score += 1
+            dots.remove(dot)
+            # Add a new dot
+            dots.append({
+                'x': random.randint(0, SCREEN_WIDTH - dot_size),
+                'y': random.randint(0, SCREEN_HEIGHT // 2),
+                'color': RED
+            })
+
+    # Drawing
+    screen.fill(WHITE)  # Clear screen with white background
+
+    # Draw player
+    pygame.draw.rect(screen, BLUE, (player_x, player_y, player_size, player_size))
+
+    # Draw dots
+    for dot in dots:
+        pygame.draw.circle(screen, dot['color'], (dot['x'] + dot_size // 2, dot['y'] + dot_size // 2), dot_size // 2)
+
+    # Display score
+    score_text = font.render(f"Score: {score}", True, (0, 0, 0))
+    screen.blit(score_text, (10, 10))
+
+    pygame.display.flip()  # Update the display
+
+    clock.tick(60)  # Limit frame rate to 60 FPS
+
+pygame.quit()
