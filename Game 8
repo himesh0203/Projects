@@ -1,0 +1,70 @@
+def play_game():
+    current_room = "entrance"
+    inventory = []
+    game_over = False
+
+    rooms = {
+        "entrance": {
+            "description": "You are at the entrance of a dark cave. There's a path leading 'north' and a faint 'light' coming from the east.",
+            "exits": {"north": "cavern", "east": "shrine"},
+            "items": [],
+        },
+        "cavern": {
+            "description": "A vast, echoing cavern. You see a 'sword' lying on the ground. A narrow passage leads 'south'.",
+            "exits": {"south": "entrance"},
+            "items": ["sword"],
+        },
+        "shrine": {
+            "description": "A small, ancient shrine. A glowing 'orb' rests on an altar. A path leads 'west'.",
+            "exits": {"west": "entrance"},
+            "items": ["orb"],
+        },
+    }
+
+    print("Welcome to the Text Adventure!")
+    print("Type 'help' for commands.")
+
+    while not game_over:
+        room_info = rooms[current_room]
+        print(f"\n--- {current_room.capitalize()} ---")
+        print(room_info["description"])
+
+        if room_info["items"]:
+            print("You see:", ", ".join(room_info["items"]))
+
+        command = input("> ").lower().strip()
+
+        if command == "help":
+            print("Commands: go [direction], take [item], inventory, quit")
+        elif command.startswith("go "):
+            direction = command[3:]
+            if direction in room_info["exits"]:
+                current_room = room_info["exits"][direction]
+            else:
+                print("You can't go that way.")
+        elif command.startswith("take "):
+            item = command[5:]
+            if item in room_info["items"]:
+                inventory.append(item)
+                room_info["items"].remove(item)
+                print(f"You picked up the {item}.")
+            else:
+                print("That item is not here.")
+        elif command == "inventory":
+            if inventory:
+                print("Your inventory:", ", ".join(inventory))
+            else:
+                print("Your inventory is empty.")
+        elif command == "quit":
+            game_over = True
+            print("Thanks for playing!")
+        else:
+            print("Invalid command.")
+
+        # Example of a simple game objective
+        if current_room == "shrine" and "sword" in inventory and "orb" in inventory:
+            print("\nCongratulations! You have found both the sword and the orb and returned to the shrine.")
+            print("You have completed the adventure!")
+            game_over = True
+
+play_game()
