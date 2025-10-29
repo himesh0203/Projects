@@ -1,0 +1,52 @@
+def start_game():
+    print("Welcome to the Text Adventure Game!")
+    print("You find yourself in a mysterious forest.")
+    print("You can go 'north', 'east', 'south', or 'west'.")
+    print("Type 'quit' to exit the game.")
+    current_location = "forest_clearing"
+    game_state = True
+
+    while game_state:
+        if current_location == "forest_clearing":
+            print("\nYou are in a forest clearing. There's a path leading north and a faint trail to the east.")
+            action = input("What do you do? ").lower()
+            if action == "north":
+                current_location = "ancient_ruins"
+            elif action == "east":
+                current_location = "dark_cave_entrance"
+            elif action == "quit":
+                game_state = False
+            else:
+                print("Invalid action. Try again.")
+
+        elif current_location == "ancient_ruins":
+            print("\nYou stand before ancient ruins. A sense of history hangs in the air. You can go 'south' back to the clearing.")
+            action = input("What do you do? ").lower()
+            if action == "south":
+                current_location = "forest_clearing"
+            elif action == "quit":
+                game_state = False
+            else:
+                print("Invalid action. Try again.")
+
+        elif current_location == "dark_cave_entrance":
+            print("\nYou are at the entrance of a dark cave. You hear strange noises from within. You can go 'west' back to the clearing, or 'enter' the cave.")
+            action = input("What do you do? ").lower()
+            if action == "west":
+                current_location = "forest_clearing"
+            elif action == "enter":
+                current_location = "inside_cave"
+            elif action == "quit":
+                game_state = False
+            else:
+                print("Invalid action. Try again.")
+
+        elif current_location == "inside_cave":
+            print("\nInside the cave, it's pitch black. You trip and fall into a hidden pit!")
+            print("Game Over!")
+            game_state = False
+
+    print("Thanks for playing!")
+
+if __name__ == "__main__":
+    start_game()
