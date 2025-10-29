@@ -1,0 +1,92 @@
+import pygame
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Simple Pygame Paddle Game")
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+# Paddle properties
+paddle_width = 15
+paddle_height = 100
+paddle_speed = 5
+
+# Player 1 paddle
+player1_x = 50
+player1_y = SCREEN_HEIGHT / 2 - paddle_height / 2
+
+# Player 2 paddle
+player2_x = SCREEN_WIDTH - 50 - paddle_width
+player2_y = SCREEN_HEIGHT / 2 - paddle_height / 2
+
+# Ball properties
+ball_size = 20
+ball_x = SCREEN_WIDTH / 2 - ball_size / 2
+ball_y = SCREEN_HEIGHT / 2 - ball_size / 2
+ball_dx = 3  # Ball movement in x-direction
+ball_dy = 3  # Ball movement in y-direction
+
+# Game loop
+running = True
+clock = pygame.time.Clock()
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Paddle movement (using keyboard input)
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_w] and player1_y > 0:
+        player1_y -= paddle_speed
+    if keys[pygame.K_s] and player1_y < SCREEN_HEIGHT - paddle_height:
+        player1_y += paddle_speed
+    if keys[pygame.K_UP] and player2_y > 0:
+        player2_y -= paddle_speed
+    if keys[pygame.K_DOWN] and player2_y < SCREEN_HEIGHT - paddle_height:
+        player2_y += paddle_speed
+
+    # Ball movement
+    ball_x += ball_dx
+    ball_y += ball_dy
+
+    # Ball collision with top/bottom walls
+    if ball_y <= 0 or ball_y >= SCREEN_HEIGHT - ball_size:
+        ball_dy *= -1
+
+    # Ball collision with paddles
+    # Player 1 paddle collision
+    if (ball_x <= player1_x + paddle_width and
+            player1_y <= ball_y <= player1_y + paddle_height):
+        ball_dx *= -1
+    # Player 2 paddle collision
+    if (ball_x + ball_size >= player2_x and
+            player2_y <= ball_y <= player2_y + paddle_height):
+        ball_dx *= -1
+
+    # Ball out of bounds (reset)
+    if ball_x < 0 or ball_x > SCREEN_WIDTH:
+        ball_x = SCREEN_WIDTH / 2 - ball_size / 2
+        ball_y = SCREEN_HEIGHT / 2 - ball_size / 2
+        ball_dx *= -1  # Reverse direction for next round
+
+    # Drawing
+    screen.fill(BLACK)  # Clear screen with black background
+    pygame.draw.rect(screen, WHITE, (player1_x, player1_y, paddle_width, paddle_height))
+    pygame.draw.rect(screen, WHITE, (player2_x, player2_y, paddle_width, paddle_height))
+    pygame.draw.ellipse(screen, WHITE, (ball_x, ball_y, ball_size, ball_size))
+
+    # Update display
+    pygame.display.flip()
+
+    # Frame rate
+    clock.tick(60)
+
+pygame.quit()
