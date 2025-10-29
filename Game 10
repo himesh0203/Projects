@@ -1,0 +1,51 @@
+import turtle
+import random
+
+# Setup the screen
+wn = turtle.Screen()
+wn.setup(width=600, height=400)
+wn.bgcolor("lightgreen")
+wn.title("Turtle Racer")
+
+# Create two turtles
+player1 = turtle.Turtle()
+player1.shape("turtle")
+player1.color("blue")
+player1.penup()
+player1.goto(-250, 100)
+
+player2 = turtle.Turtle()
+player2.shape("turtle")
+player2.color("red")
+player2.penup()
+player2.goto(-250, -100)
+
+# Draw finish line
+finish_line = turtle.Turtle()
+finish_line.penup()
+finish_line.goto(200, 150)
+finish_line.pendown()
+finish_line.setheading(270)
+finish_line.pensize(5)
+finish_line.forward(300)
+finish_line.hideturtle()
+
+# Function to move turtles
+def move_turtle(turtle_obj):
+    turtle_obj.forward(random.randint(5, 15))
+
+# Game loop
+game_over = False
+while not game_over:
+    move_turtle(player1)
+    move_turtle(player2)
+
+    # Check for winner
+    if player1.xcor() >= 200:
+        player1.write("Winner!", align="center", font=("Arial", 16, "normal"))
+        game_over = True
+    elif player2.xcor() >= 200:
+        player2.write("Winner!", align="center", font=("Arial", 16, "normal"))
+        game_over = True
+
+wn.exitonclick()
