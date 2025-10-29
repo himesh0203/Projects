@@ -1,0 +1,79 @@
+import pygame
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Simple Pong")
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+# Paddle properties
+PADDLE_WIDTH = 20
+PADDLE_HEIGHT = 100
+paddle_speed = 5
+
+player_paddle = pygame.Rect(50, SCREEN_HEIGHT // 2 - PADDLE_HEIGHT // 2, PADDLE_WIDTH, PADDLE_HEIGHT)
+ai_paddle = pygame.Rect(SCREEN_WIDTH - 50 - PADDLE_WIDTH, SCREEN_HEIGHT // 2 - PADDLE_HEIGHT // 2, PADDLE_WIDTH, PADDLE_HEIGHT)
+
+# Ball properties
+BALL_SIZE = 15
+ball = pygame.Rect(SCREEN_WIDTH // 2 - BALL_SIZE // 2, SCREEN_HEIGHT // 2 - BALL_SIZE // 2, BALL_SIZE, BALL_SIZE)
+ball_dx = 3
+ball_dy = 3
+
+# Game loop
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Player paddle movement
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_UP] and player_paddle.top > 0:
+        player_paddle.y -= paddle_speed
+    if keys[pygame.K_DOWN] and player_paddle.bottom < SCREEN_HEIGHT:
+        player_paddle.y += paddle_speed
+
+    # AI paddle movement (simple tracking)
+    if ai_paddle.centery < ball.centery and ai_paddle.bottom < SCREEN_HEIGHT:
+        ai_paddle.y += paddle_speed * 0.8  # Slightly slower AI
+    if ai_paddle.centery > ball.centery and ai_paddle.top > 0:
+        ai_paddle.y -= paddle_speed * 0.8
+
+    # Ball movement
+    ball.x += ball_dx
+    ball.y += ball_dy
+
+    # Ball collision with walls
+    if ball.top <= 0 or ball.bottom >= SCREEN_HEIGHT:
+        ball_dy *= -1
+    if ball.left <= 0 or ball.right >= SCREEN_WIDTH:
+        # Reset ball if it goes out of bounds
+        ball.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        ball_dx *= -1  # Change direction for next serve
+
+    # Ball collision with paddles
+    if ball.colliderect(player_paddle) or ball.colliderect(ai_paddle):
+        ball_dx *= -1
+
+    # Drawing
+    screen.fill(BLACK)
+    pygame.draw.rect(screen, WHITE, player_paddle)
+    pygame.draw.rect(screen, WHITE, ai_paddle)
+    pygame.draw.ellipse(screen, WHITE, ball)
+    pygame.draw.aaline(screen, WHITE, (SCREEN_WIDTH // 2, 0), (SCREEN_WIDTH // 2, SCREEN_HEIGHT)) # Center line
+
+    # Update display
+    pygame.display.flip()
+
+    # Frame rate
+    pygame.time.Clock().tick(60)
+
+pygame.quit()
