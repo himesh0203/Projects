@@ -1,0 +1,79 @@
+import random
+import pandas as pd
+
+# -------------------- MESSAGE CLASS --------------------
+class Message:
+    def __init__(self, sender, subject, priority):
+        self.sender = sender
+        self.subject = subject
+        self.priority = priority  # High, Medium, Low
+        self.read = False
+
+    def mark_read(self):
+        self.read = True
+
+# -------------------- USER CLASS --------------------
+class User:
+    def __init__(self, name):
+        self.name = name
+        self.inbox = []
+
+    def receive_message(self, message: Message):
+        self.inbox.append(message)
+
+    def unread_messages(self):
+        return [msg for msg in self.inbox if not msg.read]
+
+    def summary(self):
+        unread = self.unread_messages()
+        high = len([m for m in unread if m.priority == "High"])
+        medium = len([m for m in unread if m.priority == "Medium"])
+        low = len([m for m in unread if m.priority == "Low"])
+        return {"Total Unread": len(unread), "High": high, "Medium": medium, "Low": low}
+
+# -------------------- SIMULATION --------------------
+def main():
+    # Create a user
+    user = User("Alice")
+
+    # Simulate receiving messages
+    senders = ["Bob", "Charlie", "Diana", "Eve"]
+    subjects = ["Meeting", "Project Update", "Invoice", "Reminder", "Newsletter"]
+    priorities = ["High", "Medium", "Low"]
+
+    for _ in range(20):  # 20 messages received
+        sender = random.choice(senders)
+        subject = random.choice(subjects)
+        priority = random.choices(priorities, weights=[0.2, 0.5, 0.3])[0]  # High less frequent
+        msg = Message(sender, subject, priority)
+        user.receive_message(msg)
+
+    # Print summary of unread messages
+    summary = user.summary()
+    print("📨 Unread Messages Summary:")
+    print(f"Total Unread: {summary['Total Unread']}")
+    print(f"High Priority: {summary['High']}")
+    print(f"Medium Priority: {summary['Medium']}")
+    print(f"Low Priority: {summary['Low']}")
+
+    # Example: Mark high priority messages as read
+    for msg in user.unread_messages():
+        if msg.priority == "High":
+            msg.mark_read()
+
+    # Print updated summary
+    updated_summary = user.summary()
+    print("\n✅ After Reading High Priority Messages:")
+    print(f"Total Unread: {updated_summary['Total Unread']}")
+    print(f"High Priority: {updated_summary['High']}")
+    print(f"Medium Priority: {updated_summary['Medium']}")
+    print(f"Low Priority: {updated_summary['Low']}")
+
+    # Detailed DataFrame
+    data = [{"Sender": m.sender, "Subject": m.subject, "Priority": m.priority, "Read": m.read} for m in user.inbox]
+    df = pd.DataFrame(data)
+    print("\n📊 Inbox Detail:")
+    print(df)
+
+if __name__ == "__main__":
+    main()
