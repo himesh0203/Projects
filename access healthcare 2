@@ -1,0 +1,175 @@
+pip install streamlit pandas matplotlib
+
+streamlit run healthcare_dashboard.py
+
+import streamlit as st
+import random
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# -------------------- HOSPITAL CLASS --------------------
+class Hospital:
+    def __init__(self, name, capacity, location):
+        self.name = name
+        self.capacity = capacity
+        self.location = location
+        self.current_patients = 0
+
+    def admit_patient(self, num=1):
+        if self.current_patients + num <= self.capacity:
+            self.current_patients += num
+            return True
+        return False
+
+    def available_beds(self):
+        return self.capacity - self.current_patients
+
+    def overload_status(self):
+        if self.current_patients > self.capacity:
+            return "Overloaded"
+        elif self.current_patients == self.capacity:
+            return "Full"
+        else:
+            return "Available"
+
+# -------------------- PATIENT CLASS --------------------
+class Patient:
+    def __init__(self, patient_id, urgency_level):
+        self.patient_id = patient_id
+        self.urgency_level = urgency_level  # 1: Low, 2: Medium, 3: High
+        self.assigned_hospital = None
+
+    def assign_hospital(self, hospital: Hospital):
+        if hospital.admit_patient():
+            self.assigned_hospital = hospital.name
+            return True
+        return False
+
+# -------------------- HEALTHCARE SYSTEM --------------------
+class HealthcareSystem:
+    def __init__(self):
+        self.hospitals = []
+        self.patients = []
+
+    def add_hospital(self, hospital: Hospital):
+        self.hospitals.append(hospital)
+
+    def add_patient(self, patient: Patient):
+        self.patients.append(patient)
+
+    def allocate_patients(self):
+        # Prioritize patients by urgency (high first)
+        self.patients.sort(key=lambda p: p.urgency_level, reverse=True)
+
+        for patient in self.patients:
+            if patient.assigned_hospital:
+                continue
+            # Assign to hospital with most available beds
+            sorted_hospitals = sorted(self.hospitals, key=lambda h: h.available_beds(), reverse=True)
+            for hospital in sorted_hospitals:
+                if patient.assign_hospital(hospital):
+                    break
+
+    def generate_dataframe(self):
+        data = []
+        for h in self.hospitals:
+            data.append({
+                "Hospital": h.name,
+                "Location": h.location,
+                "Capacity": h.capacity,
+                "Current Patients": h.current_patients,
+                "Available Beds": h.available_beds(),
+                "Status": h.overload_status()
+            })
+        hospital_df = pd.DataFrame(data)
+
+        patient_data = []
+        for p in self.patients:
+            patient_data.append({
+                "Patient ID": p.patient_id,
+                "Urgency": p.urgency_level,
+                "Assigned Hospital": p.assigned_hospital
+            })
+        patient_df = pd.DataFrame(patient_data)
+        return hospital_df, patient_df
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="🏥 Healthcare Access Dashboard", layout="wide")
+st.title("🏥 Access to Healthcare Simulation Dashboard")
+st.markdown("Simulate hospital capacity and patient allocation based on urgency levels.")
+
+# Sidebar Controls
+st.sidebar.header("Simulation Settings")
+num_hospitals = st.sidebar.slider("Number of Hospitals", 2, 10, 3)
+num_patients = st.sidebar.slider("Number of Patients", 10, 200, 50)
+
+# Initialize system
+system = HealthcareSystem()
+locations = ["Downtown", "North", "East", "West", "South"]
+
+# Add hospitals
+for i in range(num_hospitals):
+    system.add_hospital(Hospital(
+        f"Hospital {i+1}", 
+        capacity=random.randint(20, 60), 
+        location=random.choice(locations)
+    ))
+
+# Add patients
+for i in range(num_patients):
+    urgency = random.choice([1, 2, 3])
+    system.add_patient(Patient(i+1, urgency))
+
+# Allocate patients
+system.allocate_patients()
+
+# Generate dataframes
+hospital_df, patient_df = system.generate_dataframe()
+
+# Display Metrics
+st.subheader("📊 Summary Metrics")
+total_patients = len(patient_df)
+assigned = patient_df["Assigned Hospital"].notnull().sum()
+unassigned = total_patients - assigned
+
+col1, col2, col3 = st.columns(3)
+col1.metric("🧍 Total Patients", total_patients)
+col2.metric("✅ Assigned Patients", assigned)
+col3.metric("⚠️ Unassigned Patients", unassigned)
+
+# Display Tables
+st.subheader("🏥 Hospital Status")
+st.dataframe(hospital_df)
+
+st.subheader("🧍 Patient Allocation")
+st.dataframe(patient_df)
+
+# Visualizations
+st.subheader("📈 Hospital Occupancy")
+fig, ax = plt.subplots(figsize=(8,4))
+ax.bar(hospital_df["Hospital"], hospital_df["Current Patients"], color='skyblue', label="Current Patients")
+ax.bar(hospital_df["Hospital"], hospital_df["Available Beds"], bottom=hospital_df["Current Patients"], 
+       color='lightgreen', label="Available Beds")
+ax.set_ylabel("Number of Beds")
+ax.set_xlabel("Hospital")
+ax.set_title("Hospital Capacity vs Current Patients")
+ax.legend()
+st.pyplot(fig)
+
+st.subheader("🔥 Urgency Distribution")
+urgency_counts = patient_df["Urgency"].value_counts().sort_index()
+fig2, ax2 = plt.subplots(figsize=(6,4))
+ax2.bar(["Low", "Medium", "High"], urgency_counts, color=['green','orange','red'])
+ax2.set_ylabel("Number of Patients")
+ax2.set_title("Patient Urgency Levels")
+st.pyplot(fig2)
+
+# Suggestions
+st.subheader("💡 Suggestions for Improving Healthcare Access")
+st.info("""
+- Increase hospital capacities in areas with high patient demand.  
+- Implement **triage systems** to prioritize high-urgency patients.  
+- Use **telemedicine** for non-critical cases to reduce hospital load.  
+- Deploy mobile clinics in underserved locations.  
+- Monitor patient flow using real-time data for **resource allocation**.
+""")
