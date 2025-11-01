@@ -1,0 +1,76 @@
+pip install streamlit pandas matplotlib
+
+streamlit run healthy_lifestyle_dashboard.py
+
+import streamlit as st
+import matplotlib.pyplot as plt
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="🌿 Healthy Lifestyle Tracker", layout="wide")
+st.title("🌿 Healthy Lifestyle Dilemmas Tracker")
+st.markdown("Track your daily habits, identify potential dilemmas, and get personalized suggestions.")
+
+# -------------------- USER INPUT --------------------
+st.subheader("📋 Enter Your Daily Habits")
+name = st.text_input("Enter your name", "User")
+
+sleep_hours = st.slider("Hours of sleep last night", 0, 12, 7)
+water_intake = st.slider("Liters of water consumed today", 0.0, 5.0, 2.0, 0.1)
+exercise_minutes = st.slider("Minutes of exercise today", 0, 180, 30)
+fruits_veggies = st.slider("Servings of fruits/vegetables today", 0, 10, 5)
+screen_time = st.slider("Hours of screen time today", 0, 12, 4)
+
+# -------------------- ANALYSIS --------------------
+st.subheader("📝 Analysis")
+dilemmas = []
+
+if sleep_hours < 7:
+    dilemmas.append("Not enough sleep: Aim for 7-9 hours per night.")
+elif sleep_hours > 9:
+    dilemmas.append("Too much sleep: Excessive sleep can affect productivity.")
+
+if water_intake < 2:
+    dilemmas.append("Low water intake: Aim for at least 2 liters per day.")
+
+if exercise_minutes < 30:
+    dilemmas.append("Low physical activity: Try to exercise at least 30 minutes daily.")
+
+if fruits_veggies < 5:
+    dilemmas.append("Not enough fruits/vegetables: Aim for 5 servings per day.")
+
+if screen_time > 8:
+    dilemmas.append("Excessive screen time: Try to limit screen usage.")
+
+if dilemmas:
+    st.warning("Here are some healthy lifestyle dilemmas to address:")
+    for d in dilemmas:
+        st.write(f"- {d}")
+else:
+    st.success("Great job! Your habits look healthy today. 🎉")
+
+# -------------------- VISUALIZATION --------------------
+st.subheader("📊 Your Daily Habits Overview")
+habits = {
+    "Sleep (hrs)": sleep_hours,
+    "Water (L)": water_intake,
+    "Exercise (min)": exercise_minutes,
+    "Fruits/Veggies": fruits_veggies,
+    "Screen Time (hrs)": screen_time
+}
+
+fig, ax = plt.subplots(figsize=(8,4))
+ax.barh(list(habits.keys()), list(habits.values()), color='skyblue')
+ax.set_xlim(0, max(list(habits.values()) + [10]))
+ax.set_xlabel("Amount")
+ax.set_title(f"Daily Habit Overview for {name}")
+st.pyplot(fig)
+
+# -------------------- SUGGESTIONS --------------------
+st.subheader("💡 Tips to Improve Your Lifestyle")
+st.info("""
+- Maintain **consistent sleep schedule** for better energy.  
+- Drink enough **water throughout the day**.  
+- Aim for **at least 30 minutes of physical activity** daily.  
+- Include **5 servings of fruits and vegetables** daily.  
+- Limit **screen time** and take breaks from devices.
+""")
