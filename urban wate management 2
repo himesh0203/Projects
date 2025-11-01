@@ -1,0 +1,121 @@
+import random
+import time
+import networkx as nx
+import matplotlib.pyplot as plt
+
+class WasteBin:
+    def __init__(self, bin_id, location, capacity=100):
+        self.bin_id = bin_id
+        self.location = location
+        self.capacity = capacity
+        self.current_level = random.randint(10, 70)
+        self.last_collected = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def add_waste(self, amount):
+        self.current_level = min(self.capacity, self.current_level + amount)
+
+    def is_full(self):
+        return self.current_level >= self.capacity * 0.9
+
+    def empty_bin(self):
+        print(f"🧹 Collecting waste from bin {self.bin_id} at {self.location}")
+        self.current_level = 0
+        self.last_collected = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def __repr__(self):
+        percent_full = (self.current_level / self.capacity) * 100
+        return (f"Bin {self.bin_id} | Location: {self.location} | "
+                f"Fill: {percent_full:.1f}% | Last Collected: {self.last_collected}")
+
+class WasteManagementSystem:
+    def __init__(self):
+        self.bins = []
+        self.city_graph = nx.Graph()
+
+    def add_bin(self, bin, connections):
+        """Add a bin and its connections to other bins (for route optimization)."""
+        self.bins.append(bin)
+        self.city_graph.add_node(bin.location)
+
+        for neighbor, distance in connections:
+            self.city_graph.add_edge(bin.location, neighbor, weight=distance)
+
+    def simulate_waste_generation(self):
+        for bin in self.bins:
+            bin.add_waste(random.randint(10, 40))
+
+    def monitor_bins(self):
+        print("\n📊 Current Waste Bin Status:")
+        for bin in self.bins:
+            print(bin)
+
+    def schedule_collection(self, start_location="Depot"):
+        """Find the best route for collecting from full bins."""
+        full_bins = [bin for bin in self.bins if bin.is_full()]
+
+        if not full_bins:
+            print("\n✅ No bins are full — no collection needed right now.")
+            return
+
+        print("\n🚛 Scheduling waste collection route...")
+
+        # Create list of destinations
+        destinations = [bin.location for bin in full_bins]
+
+        # Find shortest paths from the depot to each full bin
+        for destination in destinations:
+            try:
+                route = nx.shortest_path(self.city_graph, source=start_location, target=destination, weight='weight')
+                distance = nx.shortest_path_length(self.city_graph, source=start_location, target=destination, weight='weight')
+                print(f"🚗 Route to {destination}: {' -> '.join(route)} (Distance: {distance} km)")
+            except nx.NetworkXNoPath:
+                print(f"⚠️ No path found to {destination}!")
+
+        # Simulate collecting from full bins
+        for bin in full_bins:
+            bin.empty_bin()
+
+    def visualize_bin_levels(self):
+        """Show a bar chart of current fill levels for all bins."""
+        bin_names = [bin.location for bin in self.bins]
+        levels = [bin.current_level for bin in self.bins]
+
+        plt.figure(figsize=(8, 5))
+        bars = plt.bar(bin_names, levels, color=['green' if l < 80 else 'red' for l in levels])
+        plt.xlabel("Location")
+        plt.ylabel("Waste Level (kg)")
+        plt.title("Urban Waste Bin Fill Levels")
+        plt.ylim(0, 100)
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+        for bar, level in zip(bars, levels):
+            plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height() - 10,
+                     f"{level}%", ha='center', color='white', fontweight='bold')
+
+        plt.show()
+
+    def run_cycle(self):
+        self.simulate_waste_generation()
+        self.monitor_bins()
+        self.visualize_bin_levels()
+        self.schedule_collection()
+
+# ---------------- MAIN SIMULATION ----------------
+def main():
+    system = WasteManagementSystem()
+
+    # Add city nodes and routes (simplified graph)
+    system.city_graph.add_node("Depot")  # starting point
+
+    system.add_bin(WasteBin(1, "Downtown"), [("Depot", 5), ("City Park", 3)])
+    system.add_bin(WasteBin(2, "City Park"), [("Downtown", 3), ("Residential Area", 4)])
+    system.add_bin(WasteBin(3, "Residential Area"), [("City Park", 4), ("Industrial Zone", 6)])
+    system.add_bin(WasteBin(4, "Industrial Zone"), [("Residential Area", 6), ("Depot", 7)])
+
+    for cycle in range(1, 4):
+        print(f"\n===== 🌆 Waste Management Cycle {cycle} =====")
+        system.run_cycle()
+        time.sleep(2)
+
+if __name__ == "__main__":
+    main()
