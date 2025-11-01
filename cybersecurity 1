@@ -1,0 +1,97 @@
+import hashlib
+import string
+import random
+from cryptography.fernet import Fernet
+
+# -------------------- PASSWORD STRENGTH CHECKER --------------------
+def check_password_strength(password):
+    strength = "Weak"
+    if len(password) >= 8:
+        has_upper = any(c.isupper() for c in password)
+        has_lower = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        has_symbol = any(c in string.punctuation for c in password)
+
+        if has_upper and has_lower and has_digit and has_symbol:
+            strength = "Strong"
+        elif (has_upper and has_lower and has_digit) or (has_lower and has_digit and has_symbol):
+            strength = "Moderate"
+
+    return strength
+
+# -------------------- DATA ENCRYPTION --------------------
+def generate_key():
+    return Fernet.generate_key()
+
+def encrypt_message(message, key):
+    f = Fernet(key)
+    encrypted = f.encrypt(message.encode())
+    return encrypted
+
+def decrypt_message(encrypted_message, key):
+    f = Fernet(key)
+    decrypted = f.decrypt(encrypted_message).decode()
+    return decrypted
+
+# -------------------- LOGIN MONITOR --------------------
+class LoginSystem:
+    def __init__(self):
+        self.users = {}  # username: password hash
+        self.failed_attempts = {}
+
+    def create_user(self, username, password):
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        self.users[username] = password_hash
+        self.failed_attempts[username] = 0
+        print(f"User '{username}' created successfully!")
+
+    def login(self, username, password):
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        if username not in self.users:
+            print("User does not exist!")
+            return False
+        if self.users[username] == password_hash:
+            print("Login successful!")
+            self.failed_attempts[username] = 0
+            return True
+        else:
+            self.failed_attempts[username] += 1
+            print(f"Login failed! Attempt {self.failed_attempts[username]}")
+            if self.failed_attempts[username] >= 3:
+                print("⚠️ Suspicious activity detected! Account locked temporarily.")
+            return False
+
+# -------------------- SIMULATION --------------------
+def main():
+    print("🔐 Cyber Security Toolkit")
+
+    # Password Strength
+    password = input("Enter a password to check strength: ")
+    strength = check_password_strength(password)
+    print(f"Password Strength: {strength}")
+
+    # Encryption / Decryption
+    key = generate_key()
+    message = input("\nEnter a message to encrypt: ")
+    encrypted = encrypt_message(message, key)
+    print(f"Encrypted Message: {encrypted}")
+
+    decrypted = decrypt_message(encrypted, key)
+    print(f"Decrypted Message: {decrypted}")
+
+    # Login System
+    login_system = LoginSystem()
+    print("\n--- User Creation ---")
+    username = input("Create a username: ")
+    password = input("Create a password: ")
+    login_system.create_user(username, password)
+
+    print("\n--- Login Attempts ---")
+    for i in range(5):
+        print(f"\nAttempt {i+1}")
+        uname = input("Username: ")
+        pwd = input("Password: ")
+        login_system.login(uname, pwd)
+
+if __name__ == "__main__":
+    main()
