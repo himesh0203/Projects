@@ -1,0 +1,66 @@
+from datetime import datetime
+
+# -------------------- FINANCE CLASS --------------------
+class PersonalFinance:
+    def __init__(self, name):
+        self.name = name
+        self.income = []
+        self.expenses = []
+
+    def add_income(self, amount, source):
+        self.income.append({"amount": amount, "source": source, "date": datetime.now()})
+
+    def add_expense(self, amount, category):
+        self.expenses.append({"amount": amount, "category": category, "date": datetime.now()})
+
+    def summary(self):
+        total_income = sum(i['amount'] for i in self.income)
+        total_expense = sum(e['amount'] for e in self.expenses)
+        savings = total_income - total_expense
+        print(f"\n💰 Finance Summary for {self.name}:")
+        print(f"Total Income: ${total_income:.2f}")
+        print(f"Total Expenses: ${total_expense:.2f}")
+        print(f"Total Savings: ${savings:.2f}")
+
+        # Expenses by category
+        categories = {}
+        for e in self.expenses:
+            categories[e['category']] = categories.get(e['category'], 0) + e['amount']
+        print("\n📊 Expenses by Category:")
+        for cat, amt in categories.items():
+            print(f"- {cat}: ${amt:.2f}")
+
+# -------------------- SIMULATION --------------------
+def main():
+    print("💰 Personal Finance Manager")
+    name = input("Enter your name: ")
+    pf = PersonalFinance(name)
+
+    while True:
+        print("\nOptions:")
+        print("1. Add Income")
+        print("2. Add Expense")
+        print("3. View Summary")
+        print("4. Exit")
+        choice = input("Choose an option (1-4): ")
+
+        if choice == "1":
+            amount = float(input("Income amount: $"))
+            source = input("Income source: ")
+            pf.add_income(amount, source)
+            print("Income added!")
+        elif choice == "2":
+            amount = float(input("Expense amount: $"))
+            category = input("Expense category (e.g., Food, Rent, Utilities): ")
+            pf.add_expense(amount, category)
+            print("Expense added!")
+        elif choice == "3":
+            pf.summary()
+        elif choice == "4":
+            print("Goodbye! 💵")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
