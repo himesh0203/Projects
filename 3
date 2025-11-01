@@ -1,0 +1,94 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# -------------------- SETUP --------------------
+st.set_page_config(page_title="🌆 Urban Solutions Dashboard", layout="wide")
+st.title("🌆 Urban & Social Solutions Dashboard with Alerts & Filters")
+st.markdown("Interactive dashboard for city management and social issues.")
+
+# -------------------- Helper Functions --------------------
+def simulate_data(categories, min_val=10, max_val=100):
+    return {cat: random.randint(min_val, max_val) for cat in categories}
+
+def plot_bar_chart(data_dict, title):
+    fig, ax = plt.subplots()
+    sns.barplot(x=list(data_dict.keys()), y=list(data_dict.values()), palette="viridis", ax=ax)
+    ax.set_title(title)
+    ax.set_ylabel("Value")
+    st.pyplot(fig)
+
+def alert_if_exceeds(value, threshold, msg):
+    if value > threshold:
+        st.error(msg)
+    elif value < threshold/2:
+        st.warning(f"{msg} is critically low!")
+
+# -------------------- Sidebar Filters --------------------
+st.sidebar.header("Filters")
+pollution_threshold = st.sidebar.slider("PM2.5 Alert Threshold", 50, 300, 100)
+sanitation_threshold = st.sidebar.slider("Minimum Clean Toilets (%)", 30, 100, 60)
+healthcare_threshold = st.sidebar.slider("Minimum Doctors", 50, 500, 100)
+
+# -------------------- 1. City Pollution --------------------
+st.subheader("🌫️ City Pollution Levels")
+pollutants = ["PM2.5", "PM10", "CO", "NO2"]
+pollution_data = {p: round(random.uniform(10, 250), 2) for p in pollutants}
+st.write(pollution_data)
+plot_bar_chart(pollution_data, "Pollution Levels")
+alert_if_exceeds(pollution_data["PM2.5"], pollution_threshold, "PM2.5 exceeds safe limit!")
+
+# -------------------- 2. Sanitation --------------------
+st.subheader("🚽 Sanitation")
+total_toilets = random.randint(50, 150)
+clean_toilets = random.randint(30, total_toilets)
+clean_percent = int((clean_toilets / total_toilets) * 100)
+st.write(f"Total Toilets: {total_toilets}, Clean Toilets: {clean_toilets} ({clean_percent}%)")
+st.progress(clean_percent)
+if clean_percent < sanitation_threshold:
+    st.warning(f"Clean toilets are below {sanitation_threshold}%!")
+
+# -------------------- 3. Healthcare Access --------------------
+st.subheader("🏥 Healthcare Access")
+hospitals = random.randint(20, 50)
+doctors = random.randint(50, 500)
+st.write(f"Hospitals: {hospitals}, Doctors: {doctors}")
+plot_bar_chart({"Hospitals": hospitals, "Doctors": doctors}, "Healthcare Facilities")
+if doctors < healthcare_threshold:
+    st.warning(f"Number of doctors is below minimum threshold ({healthcare_threshold})!")
+
+# -------------------- 4. Urban Waste Management --------------------
+st.subheader("🗑️ Urban Waste Management")
+waste_types = ["Organic", "Plastic", "Metal", "E-Waste"]
+waste_data = simulate_data(waste_types, 50, 300)
+st.write("Waste collected (kg):", waste_data)
+plot_bar_chart(waste_data, "Waste Collected by Type")
+
+# -------------------- 5. Water Management --------------------
+st.subheader("💧 Water Management")
+daily_consumption = random.randint(5000, 20000)
+recycled_water = daily_consumption * random.uniform(0.2, 0.5)
+st.write(f"Daily Consumption: {daily_consumption} L, Recycled Water: {int(recycled_water)} L")
+if recycled_water / daily_consumption < 0.3:
+    st.warning("Recycled water percentage is low!")
+
+# -------------------- 6. Energy Crisis --------------------
+st.subheader("⚡ Energy Management")
+total_energy = random.randint(10000, 50000)
+renewable_energy = total_energy * random.uniform(0.1, 0.6)
+st.write(f"Total Energy: {total_energy} kWh, Renewable: {int(renewable_energy)} kWh")
+st.progress(int((renewable_energy / total_energy) * 100))
+if renewable_energy / total_energy < 0.25:
+    st.warning("Renewable energy contribution is low!")
+
+# -------------------- Other Modules --------------------
+st.subheader("🏢 Other Urban & Social Modules")
+modules = ["Adult Education", "Public Transport", "Disabled Infrastructure", 
+           "Office Space", "Financial Inclusion", "Agriculture", "Employment", "Urban Infrastructure"]
+for module in modules:
+    value = random.randint(10, 100)
+    st.write(f"{module}: {value}")
+    st.progress(value)
