@@ -1,0 +1,141 @@
+import random
+import time
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+# -------------------- ENERGY SOURCE CLASS --------------------
+class EnergySource:
+    def __init__(self, name, max_output):
+        self.name = name
+        self.max_output = max_output  # in kWh (kilowatt-hours)
+        self.current_output = random.randint(int(0.5 * max_output), int(max_output))
+        self.history = []  # daily energy generation history
+
+    def generate_energy(self):
+        """Simulate daily energy generation (fluctuates)."""
+        variation = random.uniform(0.7, 1.1)
+        self.current_output = int(self.max_output * variation)
+        self.current_output = max(0, min(self.current_output, self.max_output))
+
+    def record_day(self):
+        """Record the day’s energy output."""
+        self.history.append(self.current_output)
+
+    def __repr__(self):
+        return f"{self.name}: {self.current_output} kWh (Max: {self.max_output} kWh)"
+
+
+# -------------------- ENERGY MANAGEMENT SYSTEM --------------------
+class EnergyManagementSystem:
+    def __init__(self, daily_demand):
+        self.sources = []
+        self.daily_demand = daily_demand  # total city demand per day (kWh)
+        self.total_generated = []
+        self.shortage_history = []
+
+    def add_source(self, source):
+        self.sources.append(source)
+
+    def simulate_day(self):
+        """Simulate energy generation for one day."""
+        total_energy = 0
+        for src in self.sources:
+            src.generate_energy()
+            total_energy += src.current_output
+            src.record_day()
+        shortage = max(0, self.daily_demand - total_energy)
+        self.total_generated.append(total_energy)
+        self.shortage_history.append(shortage)
+
+        return total_energy, shortage
+
+    def show_daily_status(self, day, total_energy, shortage):
+        print(f"\n⚡ Day {day} Energy Report:")
+        for src in self.sources:
+            print(f"   - {src}")
+        print(f"\n🏙️ Total Generated: {total_energy} kWh")
+        print(f"🏠 City Demand: {self.daily_demand} kWh")
+
+        if shortage > 0:
+            print(f"⚠️ Energy Shortage: {shortage} kWh")
+        else:
+            print("✅ Demand fully met with current generation!")
+
+    def suggest_energy_solutions(self):
+        """Suggests energy conservation & improvement tips."""
+        print("\n💡 Energy Conservation & Sustainability Tips:")
+        tips = [
+            "Install smart meters to track energy consumption in real time.",
+            "Switch to LED lighting and energy-efficient appliances.",
+            "Encourage rooftop solar installation for homes.",
+            "Promote carpooling and use of electric vehicles.",
+            "Implement battery storage systems to store surplus renewable energy."
+        ]
+        for tip in tips:
+            print(f"   - {tip}")
+
+    def visualize_energy_data(self):
+        """Plot total energy generation and shortages."""
+        days = range(1, len(self.total_generated) + 1)
+        plt.figure(figsize=(8, 5))
+        plt.plot(days, self.total_generated, marker='o', color='green', label='Energy Generated')
+        plt.axhline(y=self.daily_demand, color='blue', linestyle='--', label='Daily Demand')
+        plt.bar(days, self.shortage_history, color='red', alpha=0.3, label='Shortage (kWh)')
+        plt.xlabel("Day")
+        plt.ylabel("Energy (kWh)")
+        plt.title("⚡ Energy Generation vs Demand Over Time")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def predict_future_energy(self, days_ahead=3):
+        """AI-based prediction using Linear Regression."""
+        print("\n🤖 AI Energy Forecast (Next 3 Days):")
+
+        if len(self.total_generated) < 3:
+            print("Not enough data for prediction yet.")
+            return
+
+        X = np.arange(len(self.total_generated)).reshape(-1, 1)
+        y = np.array(self.total_generated)
+        model = LinearRegression()
+        model.fit(X, y)
+
+        future_days = np.arange(len(self.total_generated), len(self.total_generated) + days_ahead).reshape(-1, 1)
+        predictions = model.predict(future_days)
+
+        for i, pred in enumerate(predictions, 1):
+            predicted_energy = int(pred)
+            shortage = max(0, self.daily_demand - predicted_energy)
+            status = "⚠️ Shortage Expected" if shortage > 0 else "✅ Sufficient Supply"
+            print(f"   Day +{i}: Predicted Generation = {predicted_energy} kWh → {status}")
+
+    def run_simulation(self, days=7):
+        """Run simulation for multiple days."""
+        for day in range(1, days + 1):
+            total_energy, shortage = self.simulate_day()
+            self.show_daily_status(day, total_energy, shortage)
+            time.sleep(1)
+
+        self.visualize_energy_data()
+        self.predict_future_energy()
+        self.suggest_energy_solutions()
+
+
+# -------------------- MAIN SIMULATION --------------------
+def main():
+    # Initialize the system with an average daily demand (kWh)
+    system = EnergyManagementSystem(daily_demand=15000)
+
+    # Add renewable and grid sources
+    system.add_source(EnergySource("Solar Plant", 6000))
+    system.add_source(EnergySource("Wind Farm", 5000))
+    system.add_source(EnergySource("Hydro Plant", 4000))
+    system.add_source(EnergySource("Thermal Grid", 3000))  # backup fossil fuel source
+
+    # Simulate 7 days
+    system.run_simulation(days=7)
+
+if __name__ == "__main__":
+    main()
