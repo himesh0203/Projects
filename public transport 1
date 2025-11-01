@@ -1,0 +1,147 @@
+import random
+import time
+import matplotlib.pyplot as plt
+
+# -------------------- TRANSPORT VEHICLE CLASS --------------------
+class TransportVehicle:
+    def __init__(self, vehicle_id, route_name, capacity, fuel_capacity):
+        self.vehicle_id = vehicle_id
+        self.route_name = route_name
+        self.capacity = capacity
+        self.current_passengers = 0
+        self.fuel_capacity = fuel_capacity  # total fuel in liters
+        self.fuel_level = random.randint(int(0.5 * fuel_capacity), fuel_capacity)
+        self.distance_covered = 0
+        self.delay_minutes = 0
+
+    def simulate_trip(self):
+        """Simulate one trip."""
+        # Random passenger demand
+        passengers = random.randint(int(0.4 * self.capacity), int(1.2 * self.capacity))
+        self.current_passengers = min(passengers, self.capacity)
+
+        # Fuel consumption & distance
+        distance = random.randint(10, 50)  # km per trip
+        self.distance_covered += distance
+        fuel_used = distance * random.uniform(0.2, 0.4)
+        self.fuel_level = max(0, self.fuel_level - fuel_used)
+
+        # Random delay due to traffic
+        self.delay_minutes = random.choice([0, 0, 5, 10, 15])
+
+    def efficiency(self):
+        """Calculate passenger efficiency per trip."""
+        if self.fuel_level <= 0:
+            return 0
+        return round(self.current_passengers / max(1, self.fuel_level), 2)
+
+    def needs_refuel(self, threshold=20):
+        """Check if refueling is needed."""
+        return self.fuel_level < threshold
+
+    def __repr__(self):
+        return (f"Bus {self.vehicle_id} | Route: {self.route_name} | "
+                f"Passengers: {self.current_passengers}/{self.capacity} | "
+                f"Fuel: {int(self.fuel_level)}L | Delay: {self.delay_minutes} min")
+
+# -------------------- PUBLIC TRANSPORT SYSTEM --------------------
+class PublicTransportSystem:
+    def __init__(self):
+        self.vehicles = []
+        self.total_distance = 0
+        self.total_passengers = 0
+        self.total_delay = 0
+        self.avg_efficiency = 0
+
+    def add_vehicle(self, vehicle):
+        self.vehicles.append(vehicle)
+
+    def simulate_day(self):
+        """Run simulation for all buses for one day."""
+        total_eff = 0
+        for v in self.vehicles:
+            v.simulate_trip()
+            self.total_distance += v.distance_covered
+            self.total_passengers += v.current_passengers
+            self.total_delay += v.delay_minutes
+            total_eff += v.efficiency()
+
+        self.avg_efficiency = round(total_eff / len(self.vehicles), 2)
+
+    def daily_report(self, day):
+        print(f"\n🚏 Public Transport Report — Day {day}")
+        for v in self.vehicles:
+            print(v)
+
+        print("\n📊 Daily Summary:")
+        print(f"   Total Distance Covered: {self.total_distance} km")
+        print(f"   Total Passengers Served: {self.total_passengers}")
+        print(f"   Average Fuel Efficiency: {self.avg_efficiency}")
+        print(f"   Total Delay Time: {self.total_delay} minutes")
+
+        low_fuel = [v.vehicle_id for v in self.vehicles if v.needs_refuel()]
+        if low_fuel:
+            print("\n⚠️ Vehicles Needing Refuel:", low_fuel)
+        else:
+            print("\n✅ All vehicles have sufficient fuel levels.")
+
+    def suggest_improvements(self):
+        """Suggest improvements for better public transportation."""
+        print("\n💡 Efficiency Improvement Suggestions:")
+        suggestions = [
+            "Implement electric buses for high-density routes.",
+            "Optimize bus timings using real-time passenger data.",
+            "Use predictive maintenance to reduce breakdowns.",
+            "Promote smart ticketing to reduce boarding delays.",
+            "Encourage non-peak hour travel through fare discounts."
+        ]
+        for s in suggestions:
+            print(f"   - {s}")
+
+    def visualize_performance(self):
+        """Plot fuel efficiency and delays."""
+        vehicle_ids = [v.vehicle_id for v in self.vehicles]
+        efficiencies = [v.efficiency() for v in self.vehicles]
+        delays = [v.delay_minutes for v in self.vehicles]
+
+        fig, ax1 = plt.subplots(figsize=(8, 5))
+
+        ax1.bar(vehicle_ids, efficiencies, color='green', alpha=0.6, label='Efficiency (Passengers/Liter)')
+        ax1.set_xlabel("Vehicle ID")
+        ax1.set_ylabel("Efficiency", color='green')
+        ax1.tick_params(axis='y', labelcolor='green')
+
+        ax2 = ax1.twinx()
+        ax2.plot(vehicle_ids, delays, color='red', marker='o', label='Delay (Minutes)')
+        ax2.set_ylabel("Delay (Minutes)", color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+
+        plt.title("🚍 Bus Efficiency vs Delay Analysis")
+        fig.tight_layout()
+        plt.grid(True)
+        plt.show()
+
+
+# -------------------- MAIN SIMULATION --------------------
+def main():
+    system = PublicTransportSystem()
+
+    # Add sample buses
+    system.add_vehicle(TransportVehicle(1, "Downtown Loop", 50, 120))
+    system.add_vehicle(TransportVehicle(2, "Airport Express", 40, 100))
+    system.add_vehicle(TransportVehicle(3, "University Line", 60, 150))
+    system.add_vehicle(TransportVehicle(4, "Suburban Route", 45, 110))
+    system.add_vehicle(TransportVehicle(5, "City Center Rapid", 55, 130))
+
+    # Simulate for 5 days
+    for day in range(1, 6):
+        system.simulate_day()
+        system.daily_report(day)
+        time.sleep(1)
+
+    system.suggest_improvements()
+    system.visualize_performance()
+
+
+if __name__ == "__main__":
+    main()
