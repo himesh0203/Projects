@@ -1,0 +1,135 @@
+import random
+import time
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+# -------------------- WATER SOURCE CLASS --------------------
+class WaterSource:
+    def __init__(self, name, capacity):
+        self.name = name
+        self.capacity = capacity  # in liters
+        self.current_level = random.randint(int(0.5 * capacity), int(0.9 * capacity))
+        self.history = []  # daily water levels (for AI prediction)
+
+    def use_water(self, amount):
+        """Simulate daily consumption."""
+        self.current_level = max(0, self.current_level - amount)
+
+    def refill(self, amount):
+        """Add water from rainfall/supply."""
+        self.current_level = min(self.capacity, self.current_level + amount)
+
+    def record_day(self):
+        """Save current level for history."""
+        self.history.append(self.current_level)
+
+    def usage_percentage(self):
+        return round((self.current_level / self.capacity) * 100, 2)
+
+    def is_low(self, threshold=30):
+        return self.usage_percentage() < threshold
+
+    def __repr__(self):
+        return f"{self.name}: {self.current_level}L / {self.capacity}L ({self.usage_percentage()}%)"
+
+
+# -------------------- WATER MANAGEMENT SYSTEM --------------------
+class WaterManagementSystem:
+    def __init__(self):
+        self.sources = []
+
+    def add_source(self, source):
+        self.sources.append(source)
+
+    def simulate_daily_usage(self):
+        """Random daily water usage."""
+        for src in self.sources:
+            daily_usage = random.randint(800, 2500)
+            src.use_water(daily_usage)
+
+    def simulate_refill(self):
+        """Occasional rainfall or tank refill."""
+        for src in self.sources:
+            if random.random() < 0.4:
+                refill_amount = random.randint(1000, 4000)
+                src.refill(refill_amount)
+
+    def monitor_status(self, day):
+        """Display daily status of all sources."""
+        print(f"\n📅 Day {day}: Water Levels")
+        for src in self.sources:
+            print(f" - {src}")
+            src.record_day()
+
+        low_sources = [s.name for s in self.sources if s.is_low()]
+        if low_sources:
+            print("\n⚠️ Warning: Low water levels detected in:")
+            for s in low_sources:
+                print(f"   - {s}")
+
+    def predict_future_levels(self, days_ahead=3):
+        """Predict future water levels using Linear Regression."""
+        print("\n🤖 AI Water Level Prediction (Next 3 Days):")
+        for src in self.sources:
+            if len(src.history) < 3:
+                print(f" - {src.name}: Not enough data for prediction yet.")
+                continue
+
+            X = np.arange(len(src.history)).reshape(-1, 1)
+            y = np.array(src.history)
+            model = LinearRegression()
+            model.fit(X, y)
+
+            future_days = np.arange(len(src.history), len(src.history) + days_ahead).reshape(-1, 1)
+            predictions = model.predict(future_days)
+
+            print(f"\n📈 {src.name} Predicted Levels:")
+            for i, pred in enumerate(predictions, 1):
+                level = max(0, min(src.capacity, int(pred)))
+                percent = (level / src.capacity) * 100
+                status = "⚠️ Low" if percent < 30 else "✅ Safe"
+                print(f"   Day +{i}: {level}L ({percent:.1f}%) → {status}")
+
+    def visualize_trends(self):
+        """Visualize historical levels."""
+        plt.figure(figsize=(8, 5))
+        for src in self.sources:
+            plt.plot(src.history, marker='o', label=src.name)
+
+        plt.title("💧 Water Level Trends Over Time")
+        plt.xlabel("Days")
+        plt.ylabel("Water Level (L)")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def run_cycle(self, days=7):
+        """Simulate multiple days of operation."""
+        for day in range(1, days + 1):
+            print(f"\n================= 🌊 Day {day} =================")
+            self.simulate_daily_usage()
+            if random.random() < 0.5:
+                self.simulate_refill()
+            self.monitor_status(day)
+            time.sleep(0.8)
+
+        self.visualize_trends()
+        self.predict_future_levels()
+
+
+# -------------------- MAIN PROGRAM --------------------
+def main():
+    system = WaterManagementSystem()
+
+    # Add different water sources
+    system.add_source(WaterSource("Reservoir", 50000))
+    system.add_source(WaterSource("Overhead Tank", 10000))
+    system.add_source(WaterSource("Community Borewell", 8000))
+    system.add_source(WaterSource("Rainwater Harvest Tank", 6000))
+
+    # Run simulation for 7 days
+    system.run_cycle(days=7)
+
+if __name__ == "__main__":
+    main()
