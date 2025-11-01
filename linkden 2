@@ -1,0 +1,90 @@
+pip install streamlit pandas
+
+streamlit run mini_linkedin.py
+
+import streamlit as st
+from datetime import datetime
+
+# -------------------- DATA STORAGE --------------------
+# For simplicity, we'll store users and posts in session state
+if "users" not in st.session_state:
+    st.session_state.users = {}  # key: username, value: User object
+if "posts" not in st.session_state:
+    st.session_state.posts = []  # list of all posts
+
+# -------------------- USER CLASS --------------------
+class User:
+    def __init__(self, name, profession, location):
+        self.name = name
+        self.profession = profession
+        self.location = location
+        self.connections = set()
+        self.posts = []
+
+    def connect(self, other_user):
+        if other_user.name != self.name:
+            self.connections.add(other_user.name)
+            other_user.connections.add(self.name)
+
+    def post_update(self, content):
+        post = {
+            "author": self.name,
+            "content": content,
+            "timestamp": datetime.now()
+        }
+        self.posts.append(post)
+        st.session_state.posts.append(post)
+
+# -------------------- STREAMLIT APP --------------------
+st.set_page_config(page_title="🌐 Mini LinkedIn", layout="wide")
+st.title("🌐 Mini LinkedIn Simulation")
+
+# Sidebar: User Selection / Creation
+st.sidebar.header("👤 User Profile")
+
+username = st.sidebar.text_input("Enter your username")
+if username:
+    if username not in st.session_state.users:
+        st.sidebar.subheader("Create New Profile")
+        profession = st.sidebar.text_input("Profession")
+        location = st.sidebar.text_input("Location")
+        if st.sidebar.button("Create Profile"):
+            user = User(username, profession, location)
+            st.session_state.users[username] = user
+            st.success(f"Profile for {username} created!")
+    else:
+        user = st.session_state.users[username]
+        st.sidebar.success(f"Logged in as {username}")
+        st.sidebar.write(f"Profession: {user.profession}")
+        st.sidebar.write(f"Location: {user.location}")
+
+        # Connect with other users
+        st.sidebar.subheader("Connect with Users")
+        other_users = [u for u in st.session_state.users if u != username]
+        selected_user = st.sidebar.selectbox("Select a user to connect", other_users)
+        if st.sidebar.button("Connect"):
+            if selected_user:
+                user.connect(st.session_state.users[selected_user])
+                st.success(f"Connected with {selected_user}!")
+
+# -------------------- POST UPDATE --------------------
+st.subheader("📝 Post an Update")
+if username:
+    post_content = st.text_area("What's on your mind?")
+    if st.button("Post Update"):
+        if post_content.strip():
+            user.post_update(post_content)
+            st.success("Post shared!")
+
+# -------------------- FEED --------------------
+st.subheader("📢 Your Feed")
+if username:
+    feed_posts = [p for p in st.session_state.posts if p["author"] in user.connections or p["author"] == username]
+    feed_posts = sorted(feed_posts, key=lambda x: x["timestamp"], reverse=True)
+    if feed_posts:
+        for post in feed_posts:
+            st.markdown(f"**{post['author']}** ({post['timestamp'].strftime('%Y-%m-%d %H:%M')}): {post['content']}")
+    else:
+        st.info("No posts in your feed yet. Connect with users to see updates!")
+else:
+    st.info("Enter a username in the sidebar to start.")
