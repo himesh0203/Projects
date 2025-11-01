@@ -1,0 +1,63 @@
+from datetime import datetime
+
+# -------------------- USER CLASS --------------------
+class User:
+    def __init__(self, name, profession, location):
+        self.name = name
+        self.profession = profession
+        self.location = location
+        self.connections = []
+        self.posts = []
+
+    def connect(self, other_user):
+        if other_user not in self.connections:
+            self.connections.append(other_user)
+            other_user.connections.append(self)
+            print(f"{self.name} is now connected with {other_user.name}")
+        else:
+            print(f"{self.name} is already connected with {other_user.name}")
+
+    def post_update(self, content):
+        post = {
+            "author": self.name,
+            "content": content,
+            "timestamp": datetime.now()
+        }
+        self.posts.append(post)
+        print(f"{self.name} posted a new update!")
+
+    def view_feed(self):
+        print(f"\n📢 {self.name}'s Feed")
+        feed_posts = []
+        for connection in self.connections:
+            feed_posts.extend(connection.posts)
+        # Sort posts by timestamp descending
+        feed_posts = sorted(feed_posts, key=lambda x: x['timestamp'], reverse=True)
+        if not feed_posts:
+            print("No posts from your connections yet.")
+        for post in feed_posts:
+            print(f"{post['timestamp'].strftime('%Y-%m-%d %H:%M')} - {post['author']}: {post['content']}")
+
+# -------------------- SIMULATION --------------------
+def main():
+    # Create Users
+    alice = User("Alice", "Software Engineer", "New York")
+    bob = User("Bob", "Data Scientist", "San Francisco")
+    charlie = User("Charlie", "Product Manager", "Chicago")
+
+    # Connect Users
+    alice.connect(bob)
+    bob.connect(charlie)
+
+    # Post Updates
+    alice.post_update("Excited to start a new project in AI!")
+    bob.post_update("Attending a Data Science webinar today.")
+    charlie.post_update("Looking for talented engineers for our team.")
+
+    # View Feeds
+    alice.view_feed()
+    bob.view_feed()
+    charlie.view_feed()
+
+if __name__ == "__main__":
+    main()
