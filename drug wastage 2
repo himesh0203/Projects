@@ -1,0 +1,105 @@
+pip install streamlit pandas matplotlib
+
+streamlit run drug_wastage_dashboard.py
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+import random
+import matplotlib.pyplot as plt
+
+# -------------------- DRUG CLASS --------------------
+class Drug:
+    def __init__(self, name, quantity, cost_per_unit, expiry_date):
+        self.name = name
+        self.quantity = quantity
+        self.cost_per_unit = cost_per_unit
+        self.expiry_date = expiry_date
+        self.used_quantity = 0
+
+    def use_drug(self, amount):
+        used = min(amount, self.quantity - self.used_quantity)
+        self.used_quantity += used
+        return used
+
+    def wasted_quantity(self, current_date):
+        if current_date > self.expiry_date:
+            return self.quantity - self.used_quantity
+        return 0
+
+    def wasted_cost(self, current_date):
+        return self.wasted_quantity(current_date) * self.cost_per_unit
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="💊 Drug Wastage Dashboard", layout="wide")
+st.title("💊 Drug Wastage Management Dashboard")
+st.markdown("Simulate and track drug usage and wastage in a healthcare setting.")
+
+# Sidebar: Settings
+st.sidebar.header("Simulation Settings")
+num_drugs = st.sidebar.slider("Number of Drugs in Inventory", 1, 10, 5)
+days_to_check = st.sidebar.slider("Days until Wastage Check", 1, 60, 15)
+
+current_date = datetime.today()
+drugs = []
+
+# Sidebar: Drug Input
+st.sidebar.subheader("Add Drugs to Inventory")
+for i in range(num_drugs):
+    name = st.sidebar.text_input(f"Drug {i+1} Name", f"Drug{i+1}")
+    quantity = st.sidebar.number_input(f"Quantity of {name}", min_value=10, max_value=1000, value=100)
+    cost = st.sidebar.number_input(f"Cost per unit of {name} ($)", min_value=0.1, max_value=100.0, value=1.0)
+    expiry_days = st.sidebar.number_input(f"Expiry in days for {name}", min_value=1, max_value=365, value=30)
+    expiry_date = current_date + timedelta(days=expiry_days)
+    drugs.append(Drug(name, quantity, cost, expiry_date))
+
+# Simulate random usage
+st.subheader("💉 Simulate Drug Usage")
+for drug in drugs:
+    daily_usage = st.slider(f"Daily usage of {drug.name}", 0, drug.quantity, random.randint(0, drug.quantity//2))
+    drug.use_drug(daily_usage)
+
+# Calculate wastage
+wastage_data = []
+total_wasted_qty = 0
+total_wasted_cost = 0
+for drug in drugs:
+    wasted_qty = drug.wasted_quantity(current_date + timedelta(days=days_to_check))
+    wasted_cost = drug.wasted_cost(current_date + timedelta(days=days_to_check))
+    total_wasted_qty += wasted_qty
+    total_wasted_cost += wasted_cost
+    wastage_data.append({
+        "Drug": drug.name,
+        "Quantity Received": drug.quantity,
+        "Used Quantity": drug.used_quantity,
+        "Wasted Quantity": wasted_qty,
+        "Wasted Cost ($)": round(wasted_cost, 2)
+    })
+
+df = pd.DataFrame(wastage_data)
+
+# Display wastage report
+st.subheader("📊 Drug Wastage Report")
+st.dataframe(df)
+
+# Display total wastage
+st.metric("Total Wasted Quantity", total_wasted_qty)
+st.metric("Total Wasted Cost ($)", round(total_wasted_cost, 2))
+
+# Visualization: Wasted Quantity
+st.subheader("📈 Wastage Visualization")
+fig, ax = plt.subplots(figsize=(8,4))
+ax.bar(df["Drug"], df["Wasted Quantity"], color='tomato')
+ax.set_xlabel("Drug")
+ax.set_ylabel("Wasted Quantity")
+ax.set_title(f"Drug Wastage in Next {days_to_check} Days")
+st.pyplot(fig)
+
+# Suggestions
+st.subheader("💡 Tips to Reduce Drug Wastage")
+st.info("""
+- Use **First-Expiring-First-Out (FEFO)** for inventory management.  
+- Monitor **daily usage trends** before ordering.  
+- **Redistribute near-expiry drugs** to areas where they'll be used quickly.  
+- Educate staff to **avoid over-prescription or overstocking**.  
+""")
