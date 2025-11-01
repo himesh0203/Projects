@@ -1,0 +1,111 @@
+import statistics
+import matplotlib.pyplot as plt
+
+class Student:
+    def __init__(self, student_id, name):
+        self.student_id = student_id
+        self.name = name
+        self.grades = {}  # {subject: [scores]}
+
+    def add_grade(self, subject, score):
+        if subject not in self.grades:
+            self.grades[subject] = []
+        self.grades[subject].append(score)
+
+    def average_grade(self):
+        all_scores = [score for scores in self.grades.values() for score in scores]
+        return round(statistics.mean(all_scores), 2) if all_scores else 0
+
+    def needs_support(self, threshold=60):
+        """Check if the student needs support (avg below threshold)."""
+        return self.average_grade() < threshold
+
+    def __repr__(self):
+        return f"{self.name} (ID: {self.student_id}) - Avg: {self.average_grade()}%"
+
+class EducationSystem:
+    def __init__(self):
+        self.students = []
+
+    def add_student(self, student):
+        self.students.append(student)
+
+    def record_grade(self, student_id, subject, score):
+        for student in self.students:
+            if student.student_id == student_id:
+                student.add_grade(subject, score)
+                return
+        print(f"❌ Student with ID {student_id} not found.")
+
+    def class_average(self):
+        if not self.students:
+            return 0
+        return round(statistics.mean([s.average_grade() for s in self.students]), 2)
+
+    def show_report(self):
+        print("\n📊 Student Performance Report")
+        for student in self.students:
+            print(student)
+            for subject, scores in student.grades.items():
+                avg = round(statistics.mean(scores), 2)
+                print(f"   • {subject}: {scores} (avg: {avg}%)")
+
+        print(f"\n🏫 Class Average: {self.class_average()}%")
+
+        # Identify students needing support
+        struggling = [s.name for s in self.students if s.needs_support()]
+        if struggling:
+            print("\n⚠️ Students needing extra support:")
+            for name in struggling:
+                print(f"   - {name}")
+        else:
+            print("\n✅ All students performing well!")
+
+    def visualize_performance(self):
+        names = [s.name for s in self.students]
+        averages = [s.average_grade() for s in self.students]
+
+        plt.figure(figsize=(8, 5))
+        bars = plt.bar(names, averages, color=['green' if avg >= 60 else 'red' for avg in averages])
+        plt.title("Student Performance Overview")
+        plt.xlabel("Students")
+        plt.ylabel("Average Grade (%)")
+        plt.ylim(0, 100)
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+        for bar, avg in zip(bars, averages):
+            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height()-5, f"{avg}%", 
+                     ha='center', color='white', fontweight='bold')
+
+        plt.show()
+
+# ------------------- Main Simulation -------------------
+
+def main():
+    system = EducationSystem()
+
+    # Add students
+    system.add_student(Student(1, "Alice"))
+    system.add_student(Student(2, "Bob"))
+    system.add_student(Student(3, "Catherine"))
+    system.add_student(Student(4, "David"))
+
+    # Record grades (random example data)
+    grades_data = {
+        1: {"Math": [85, 78, 90], "Science": [88, 92]},
+        2: {"Math": [45, 52, 60], "Science": [50, 55]},
+        3: {"Math": [95, 90], "Science": [88, 85]},
+        4: {"Math": [60, 65, 70], "Science": [72, 68]},
+    }
+
+    for student_id, subjects in grades_data.items():
+        for subject, scores in subjects.items():
+            for score in scores:
+                system.record_grade(student_id, subject, score)
+
+    # Show reports and visualizations
+    system.show_report()
+    system.visualize_performance()
+
+if __name__ == "__main__":
+    main()
