@@ -1,0 +1,27 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Placeholder electricity demand/supply data
+df = pd.read_csv("electricity_data.csv")  # columns: ['Date','Demand_MW','Supply_MW']
+
+# Convert date
+df['Date'] = pd.to_datetime(df['Date'])
+
+# Calculate deficit
+df['Deficit'] = df['Demand_MW'] - df['Supply_MW']
+
+# Plot
+plt.figure(figsize=(10,5))
+plt.plot(df['Date'], df['Demand_MW'], label='Demand')
+plt.plot(df['Date'], df['Supply_MW'], label='Supply')
+plt.fill_between(df['Date'], df['Supply_MW'], df['Demand_MW'], where=(df['Deficit']>0), color='red', alpha=0.3, label='Deficit')
+plt.legend()
+plt.title("Electricity Demand vs Supply")
+plt.xlabel("Date")
+plt.ylabel("MW")
+plt.show()
+
+# Alert
+for index, row in df.iterrows():
+    if row['Deficit'] > 0:
+        print(f"⚠️ Grid Risk Alert on {row['Date'].strftime('%Y-%m-%d')}: Deficit {row['Deficit']} MW")
