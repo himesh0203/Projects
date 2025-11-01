@@ -1,0 +1,142 @@
+pip install streamlit matplotlib pandas
+
+streamlit run transport_dashboard.py
+
+import streamlit as st
+import random
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# -------------------- VEHICLE CLASS --------------------
+class TransportVehicle:
+    def __init__(self, vehicle_id, route_name, capacity, fuel_capacity):
+        self.vehicle_id = vehicle_id
+        self.route_name = route_name
+        self.capacity = capacity
+        self.current_passengers = 0
+        self.fuel_capacity = fuel_capacity
+        self.fuel_level = random.randint(int(0.5 * fuel_capacity), fuel_capacity)
+        self.distance_covered = 0
+        self.delay_minutes = 0
+
+    def simulate_trip(self):
+        """Simulate one trip."""
+        passengers = random.randint(int(0.4 * self.capacity), int(1.2 * self.capacity))
+        self.current_passengers = min(passengers, self.capacity)
+
+        distance = random.randint(10, 50)  # km per trip
+        self.distance_covered += distance
+        fuel_used = distance * random.uniform(0.2, 0.4)
+        self.fuel_level = max(0, self.fuel_level - fuel_used)
+        self.delay_minutes = random.choice([0, 0, 5, 10, 15])
+
+    def efficiency(self):
+        if self.fuel_level <= 0:
+            return 0
+        return round(self.current_passengers / max(1, self.fuel_level), 2)
+
+    def needs_refuel(self, threshold=20):
+        return self.fuel_level < threshold
+
+
+# -------------------- TRANSPORT SYSTEM --------------------
+class PublicTransportSystem:
+    def __init__(self):
+        self.vehicles = []
+
+    def add_vehicle(self, vehicle):
+        self.vehicles.append(vehicle)
+
+    def simulate_day(self):
+        data = []
+        for v in self.vehicles:
+            v.simulate_trip()
+            data.append({
+                "Vehicle ID": v.vehicle_id,
+                "Route": v.route_name,
+                "Passengers": v.current_passengers,
+                "Capacity": v.capacity,
+                "Fuel (L)": int(v.fuel_level),
+                "Efficiency": v.efficiency(),
+                "Delay (min)": v.delay_minutes,
+                "Needs Refuel": "Yes" if v.needs_refuel() else "No"
+            })
+        return pd.DataFrame(data)
+
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="🚍 Public Transport Dashboard", layout="wide")
+st.title("🚍 Smart Public Transportation Management Dashboard")
+st.markdown("### Real-time Monitoring of Bus Efficiency, Fuel, and Passenger Load")
+
+# Sidebar
+st.sidebar.header("Simulation Controls")
+num_buses = st.sidebar.slider("Number of Buses", 3, 15, 5)
+num_days = st.sidebar.slider("Simulation Days", 1, 10, 5)
+
+# Initialize transport system
+system = PublicTransportSystem()
+routes = ["Downtown Loop", "Airport Express", "University Line", "City Center Rapid", "Suburban Route"]
+
+for i in range(num_buses):
+    route = random.choice(routes)
+    capacity = random.randint(40, 60)
+    fuel_capacity = random.randint(100, 150)
+    system.add_vehicle(TransportVehicle(i + 1, route, capacity, fuel_capacity))
+
+# Simulate for multiple days
+daily_data = []
+for day in range(1, num_days + 1):
+    day_df = system.simulate_day()
+    day_df["Day"] = day
+    daily_data.append(day_df)
+
+df = pd.concat(daily_data, ignore_index=True)
+
+# Metrics summary
+avg_eff = df["Efficiency"].mean()
+avg_delay = df["Delay (min)"].mean()
+total_passengers = df["Passengers"].sum()
+low_fuel = df[df["Needs Refuel"] == "Yes"].shape[0]
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("🧍 Total Passengers Served", f"{total_passengers}")
+col2.metric("⛽ Low-Fuel Vehicles", f"{low_fuel}")
+col3.metric("⚙️ Avg Efficiency", f"{avg_eff:.2f}")
+col4.metric("⏱️ Avg Delay", f"{avg_delay:.1f} min")
+
+# Table view
+st.subheader("📋 Vehicle Status")
+st.dataframe(df[["Day", "Vehicle ID", "Route", "Passengers", "Fuel (L)", "Efficiency", "Delay (min)", "Needs Refuel"]])
+
+# Visualization
+st.subheader("📈 Transport Efficiency & Delay Trends")
+
+fig, ax1 = plt.subplots(figsize=(9, 4))
+ax1.plot(df["Day"], df["Efficiency"], color='green', marker='o', label='Efficiency')
+ax1.set_xlabel("Day")
+ax1.set_ylabel("Efficiency", color='green')
+ax1.tick_params(axis='y', labelcolor='green')
+
+ax2 = ax1.twinx()
+ax2.plot(df["Day"], df["Delay (min)"], color='red', marker='x', linestyle='--', label='Delay')
+ax2.set_ylabel("Delay (min)", color='red')
+ax2.tick_params(axis='y', labelcolor='red')
+
+fig.tight_layout()
+st.pyplot(fig)
+
+# Route performance
+st.subheader("🛣️ Route Efficiency Overview")
+route_summary = df.groupby("Route")[["Passengers", "Efficiency", "Delay (min)"]].mean().reset_index()
+st.bar_chart(route_summary.set_index("Route"))
+
+# Suggestions
+st.subheader("💡 Smart City Improvement Suggestions")
+st.info("""
+- Use **electric buses** for high-density routes to reduce emissions.  
+- Implement **real-time passenger tracking** to optimize routes.  
+- Introduce **AI-powered scheduling** to reduce peak-hour delays.  
+- Add **smart ticketing** to speed up boarding.  
+- Encourage **bike + bus integration** for last-mile connectivity.  
+""")
