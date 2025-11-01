@@ -1,0 +1,103 @@
+pip install streamlit cryptography
+
+streamlit run cyber_security_dashboard.py
+
+import streamlit as st
+import string
+import hashlib
+from cryptography.fernet import Fernet
+
+# -------------------- PASSWORD STRENGTH CHECKER --------------------
+def check_password_strength(password):
+    strength = "Weak"
+    if len(password) >= 8:
+        has_upper = any(c.isupper() for c in password)
+        has_lower = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        has_symbol = any(c in string.punctuation for c in password)
+
+        if has_upper and has_lower and has_digit and has_symbol:
+            strength = "Strong"
+        elif (has_upper and has_lower and has_digit) or (has_lower and has_digit and has_symbol):
+            strength = "Moderate"
+    return strength
+
+# -------------------- DATA ENCRYPTION / DECRYPTION --------------------
+def generate_key():
+    return Fernet.generate_key()
+
+def encrypt_message(message, key):
+    f = Fernet(key)
+    return f.encrypt(message.encode())
+
+def decrypt_message(encrypted_message, key):
+    f = Fernet(key)
+    return f.decrypt(encrypted_message).decode()
+
+# -------------------- LOGIN SYSTEM --------------------
+class LoginSystem:
+    def __init__(self):
+        self.users = {}
+        self.failed_attempts = {}
+
+    def create_user(self, username, password):
+        self.users[username] = hashlib.sha256(password.encode()).hexdigest()
+        self.failed_attempts[username] = 0
+
+    def login(self, username, password):
+        if username not in self.users:
+            return "User does not exist!"
+        if self.users[username] == hashlib.sha256(password.encode()).hexdigest():
+            self.failed_attempts[username] = 0
+            return "Login successful!"
+        else:
+            self.failed_attempts[username] += 1
+            if self.failed_attempts[username] >= 3:
+                return "⚠️ Suspicious activity detected! Account temporarily locked."
+            return f"Login failed! Attempt {self.failed_attempts[username]}"
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="🛡️ Cyber Security Dashboard", layout="wide")
+st.title("🛡️ Cyber Security Dashboard")
+
+# Password Strength
+st.subheader("🔑 Password Strength Checker")
+password = st.text_input("Enter a password to check strength", type="password")
+if password:
+    strength = check_password_strength(password)
+    st.info(f"Password Strength: {strength}")
+
+# Encryption / Decryption
+st.subheader("🔐 Message Encryption & Decryption")
+message = st.text_input("Enter a message to encrypt")
+if message:
+    key = generate_key()
+    encrypted = encrypt_message(message, key)
+    decrypted = decrypt_message(encrypted, key)
+    st.code(f"Encrypted Message:\n{encrypted}")
+    st.code(f"Decrypted Message:\n{decrypted}")
+    st.info("Encryption uses Fernet symmetric encryption for secure messaging.")
+
+# Login Simulation
+st.subheader("👤 Login Simulation")
+login_system = LoginSystem()
+username_create = st.text_input("Create a new username")
+password_create = st.text_input("Create a password", type="password")
+if st.button("Create User"):
+    if username_create and password_create:
+        login_system.create_user(username_create, password_create)
+        st.success(f"User '{username_create}' created successfully!")
+
+st.markdown("---")
+st.write("### Try Logging In")
+username_login = st.text_input("Username to login")
+password_login = st.text_input("Password to login", type="password")
+if st.button("Login"):
+    if username_login and password_login:
+        result = login_system.login(username_login, password_login)
+        if "successful" in result:
+            st.success(result)
+        elif "Suspicious" in result:
+            st.error(result)
+        else:
+            st.warning(result)
