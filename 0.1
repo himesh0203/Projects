@@ -1,0 +1,63 @@
+import tkinter as tk
+from tkinter import messagebox
+
+# Function to submit ratings
+def submit_ratings():
+    try:
+        food = int(food_entry.get())
+        road = int(road_entry.get())
+        education = int(education_entry.get())
+        water = int(water_entry.get())
+        electricity = int(electricity_entry.get())
+        
+        # Simple validation
+        if any(r < 1 or r > 5 for r in [food, road, education, water, electricity]):
+            messagebox.showerror("Error", "Please enter ratings between 1 and 5")
+            return
+        
+        # Display results
+        result_text = (
+            f"Food Quality: {food}\n"
+            f"Road Quality: {road}\n"
+            f"Education Quality: {education}\n"
+            f"Water Quality: {water}\n"
+            f"Electricity Availability: {electricity}"
+        )
+        messagebox.showinfo("Submitted Ratings", result_text)
+    
+    except ValueError:
+        messagebox.showerror("Error", "Please enter valid numbers")
+
+# Create main window
+root = tk.Tk()
+root.title("Community Service Ratings")
+root.geometry("400x350")
+
+# Labels and entry fields
+tk.Label(root, text="Rate the following services (1-5):", font=("Arial", 14)).pack(pady=10)
+
+tk.Label(root, text="Food Quality:").pack()
+food_entry = tk.Entry(root)
+food_entry.pack()
+
+tk.Label(root, text="Road Quality:").pack()
+road_entry = tk.Entry(root)
+road_entry.pack()
+
+tk.Label(root, text="Education Quality:").pack()
+education_entry = tk.Entry(root)
+education_entry.pack()
+
+tk.Label(root, text="Water Quality:").pack()
+water_entry = tk.Entry(root)
+water_entry.pack()
+
+tk.Label(root, text="Electricity Availability:").pack()
+electricity_entry = tk.Entry(root)
+electricity_entry.pack()
+
+# Submit button
+submit_button = tk.Button(root, text="Submit Ratings", command=submit_ratings)
+submit_button.pack(pady=20)
+
+root.mainloop()
