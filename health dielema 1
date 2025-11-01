@@ -1,0 +1,67 @@
+from datetime import datetime
+
+# -------------------- USER CLASS --------------------
+class User:
+    def __init__(self, name):
+        self.name = name
+        self.habits = {
+            "sleep_hours": 0,
+            "water_intake_liters": 0,
+            "exercise_minutes": 0,
+            "fruits_veggies_servings": 0,
+            "screen_time_hours": 0
+        }
+
+    def log_habits(self):
+        print(f"\nLogging habits for {self.name}:")
+        self.habits["sleep_hours"] = float(input("Hours of sleep last night: "))
+        self.habits["water_intake_liters"] = float(input("Liters of water consumed today: "))
+        self.habits["exercise_minutes"] = float(input("Minutes of exercise today: "))
+        self.habits["fruits_veggies_servings"] = int(input("Servings of fruits/vegetables today: "))
+        self.habits["screen_time_hours"] = float(input("Hours of screen time today: "))
+
+    def analyze_habits(self):
+        dilemmas = []
+
+        # Sleep
+        if self.habits["sleep_hours"] < 7:
+            dilemmas.append("Not enough sleep: Aim for 7-9 hours per night.")
+        elif self.habits["sleep_hours"] > 9:
+            dilemmas.append("Too much sleep: Excessive sleep can affect productivity.")
+
+        # Water Intake
+        if self.habits["water_intake_liters"] < 2:
+            dilemmas.append("Low water intake: Aim for at least 2 liters per day.")
+
+        # Exercise
+        if self.habits["exercise_minutes"] < 30:
+            dilemmas.append("Low physical activity: Try to exercise at least 30 minutes daily.")
+
+        # Fruits & Veggies
+        if self.habits["fruits_veggies_servings"] < 5:
+            dilemmas.append("Not enough fruits/vegetables: Aim for 5 servings per day.")
+
+        # Screen Time
+        if self.habits["screen_time_hours"] > 8:
+            dilemmas.append("Excessive screen time: Try to limit screen usage.")
+
+        return dilemmas
+
+# -------------------- SIMULATION --------------------
+def main():
+    print("🥗 Healthy Lifestyle Dilemmas Checker")
+    name = input("Enter your name: ")
+    user = User(name)
+
+    user.log_habits()
+    dilemmas = user.analyze_habits()
+
+    print(f"\n📝 Analysis for {user.name}:")
+    if dilemmas:
+        for d in dilemmas:
+            print(f"- {d}")
+    else:
+        print("Great job! Your habits look healthy today.")
+
+if __name__ == "__main__":
+    main()
