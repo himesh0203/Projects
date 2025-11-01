@@ -1,0 +1,128 @@
+pip install streamlit pandas matplotlib seaborn
+
+streamlit run urban_solutions_dashboard.py
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+
+# -------------------- SETUP --------------------
+st.set_page_config(page_title="🌆 Urban & Social Solutions Dashboard", layout="wide")
+st.title("🌆 Urban & Social Solutions Dashboard")
+st.markdown("Visualize and simulate solutions for key urban and social challenges.")
+
+# -------------------- Helper Functions --------------------
+def simulate_data(categories, min_val=10, max_val=100):
+    return {cat: random.randint(min_val, max_val) for cat in categories}
+
+def plot_bar_chart(data_dict, title):
+    fig, ax = plt.subplots()
+    sns.barplot(x=list(data_dict.keys()), y=list(data_dict.values()), palette="viridis", ax=ax)
+    ax.set_title(title)
+    ax.set_ylabel("Value")
+    st.pyplot(fig)
+
+# -------------------- 1. Urban Waste Management --------------------
+st.subheader("🗑️ Urban Waste Management")
+waste_types = ["Organic", "Plastic", "Metal", "E-Waste"]
+waste_data = simulate_data(waste_types, 50, 300)
+st.write("Waste collected (kg):", waste_data)
+plot_bar_chart(waste_data, "Waste Collected by Type")
+
+# -------------------- 2. Adult Education --------------------
+st.subheader("📚 Adult Education Progress")
+adults = ["Alice", "Bob", "Charlie", "Diana"]
+progress_data = simulate_data(adults, 0, 100)
+for name, val in progress_data.items():
+    st.text(f"{name}: {val}% completed")
+    st.progress(val)
+
+# -------------------- 3. City Pollution --------------------
+st.subheader("🌫️ City Pollution Levels")
+pollutants = ["PM2.5", "PM10", "CO", "NO2"]
+pollution_data = {p: round(random.uniform(10, 200), 2) for p in pollutants}
+st.write(pollution_data)
+plot_bar_chart(pollution_data, "Pollution Levels")
+
+# -------------------- 4. Public Transportation --------------------
+st.subheader("🚍 Public Transportation")
+transport_data = simulate_data(["Buses", "Metro Trains", "Trams"], 10, 200)
+st.write("Fleet Status:", transport_data)
+plot_bar_chart(transport_data, "Transport Fleet")
+
+# -------------------- 5. Sanitation --------------------
+st.subheader("🚽 Sanitation")
+total_toilets = random.randint(50, 150)
+clean_toilets = random.randint(30, total_toilets)
+st.write(f"Total Toilets: {total_toilets}, Clean Toilets: {clean_toilets}")
+st.progress(clean_toilets / total_toilets)
+
+# -------------------- 6. Women & Child Safety --------------------
+st.subheader("🛡️ Women & Child Safety")
+safe_zones = random.randint(10, 50)
+incidents_reported = random.randint(0, 20)
+st.write(f"Safe Zones: {safe_zones}, Incidents Reported: {incidents_reported}")
+
+# -------------------- 7. Water Management --------------------
+st.subheader("💧 Water Management")
+daily_consumption = random.randint(5000, 20000)
+recycled_water = daily_consumption * random.uniform(0.2, 0.5)
+st.write(f"Daily Consumption: {daily_consumption} L, Recycled Water: {int(recycled_water)} L")
+
+# -------------------- 8. Disabled Friendly Infrastructure --------------------
+st.subheader("♿ Disabled Friendly Infrastructure")
+ramps = random.randint(50, 150)
+lifts = random.randint(20, 50)
+st.write(f"Ramps: {ramps}, Lifts: {lifts}")
+plot_bar_chart({"Ramps": ramps, "Lifts": lifts}, "Disabled Friendly Infrastructure")
+
+# -------------------- 9. Energy Crisis --------------------
+st.subheader("⚡ Energy Management")
+total_energy = random.randint(10000, 50000)
+renewable_energy = total_energy * random.uniform(0.2, 0.6)
+st.write(f"Total Energy: {total_energy} kWh, Renewable: {int(renewable_energy)} kWh")
+st.progress(int((renewable_energy / total_energy) * 100))
+
+# -------------------- 10. Expensive Office Space --------------------
+st.subheader("🏢 Office Space")
+avg_rent = random.randint(2000, 10000)
+available_space = random.randint(50, 300)
+st.write(f"Average Rent: ${avg_rent}/month, Available Space: {available_space} sq.m")
+
+# -------------------- 11. Access to Healthcare --------------------
+st.subheader("🏥 Healthcare Access")
+hospitals = random.randint(20, 50)
+doctors = random.randint(100, 500)
+st.write(f"Hospitals: {hospitals}, Doctors: {doctors}")
+plot_bar_chart({"Hospitals": hospitals, "Doctors": doctors}, "Healthcare Facilities")
+
+# -------------------- 12. Financial Inclusion --------------------
+st.subheader("💰 Financial Inclusion")
+bank_accounts = random.randint(1000, 5000)
+loans_disbursed = random.randint(100, 1000)
+st.write(f"Bank Accounts Opened: {bank_accounts}, Loans Disbursed: {loans_disbursed}")
+
+# -------------------- 13. Agricultural Solutions --------------------
+st.subheader("🌾 Agricultural Solutions")
+crops_planted = random.randint(100, 500)
+harvest_yield = crops_planted * random.randint(5, 20)
+st.write(f"Crops Planted: {crops_planted}, Expected Harvest: {harvest_yield} tons")
+
+# -------------------- 14. Employment Generation --------------------
+st.subheader("👷 Employment Generation")
+new_jobs = random.randint(50, 300)
+sectors = ["IT", "Manufacturing", "Service", "Retail"]
+jobs_by_sector = simulate_data(sectors, 5, 50)
+st.write(f"New Jobs Created: {new_jobs}")
+plot_bar_chart(jobs_by_sector, "Jobs by Sector")
+
+# -------------------- 15. Urban Infrastructure --------------------
+st.subheader("🏗️ Urban Infrastructure")
+roads_built = random.randint(10, 50)
+bridges_built = random.randint(1, 10)
+st.write(f"Roads Built: {roads_built} km, Bridges Built: {bridges_built}")
+plot_bar_chart({"Roads": roads_built, "Bridges": bridges_built}, "Urban Infrastructure")
