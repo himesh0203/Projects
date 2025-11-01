@@ -1,0 +1,129 @@
+pip install streamlit matplotlib scikit-learn
+
+streamlit run energy_dashboard.py
+
+import streamlit as st
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+# -------------------- ENERGY SOURCE CLASS --------------------
+class EnergySource:
+    def __init__(self, name, max_output):
+        self.name = name
+        self.max_output = max_output  # in kWh
+        self.current_output = random.randint(int(0.5 * max_output), int(max_output))
+        self.history = []
+
+    def generate_energy(self):
+        """Simulate energy production with variability."""
+        variation = random.uniform(0.7, 1.1)
+        self.current_output = int(self.max_output * variation)
+        self.current_output = max(0, min(self.current_output, self.max_output))
+        self.history.append(self.current_output)
+
+
+# -------------------- ENERGY MANAGEMENT SYSTEM --------------------
+class EnergyManagementSystem:
+    def __init__(self, daily_demand):
+        self.sources = []
+        self.daily_demand = daily_demand
+        self.total_generated = []
+        self.shortage_history = []
+
+    def add_source(self, source):
+        self.sources.append(source)
+
+    def simulate_day(self):
+        total_energy = 0
+        for src in self.sources:
+            src.generate_energy()
+            total_energy += src.current_output
+        shortage = max(0, self.daily_demand - total_energy)
+        self.total_generated.append(total_energy)
+        self.shortage_history.append(shortage)
+        return total_energy, shortage
+
+    def predict_future(self, days_ahead=3):
+        """Predict next days’ generation using Linear Regression."""
+        if len(self.total_generated) < 3:
+            return None
+        X = np.arange(len(self.total_generated)).reshape(-1, 1)
+        y = np.array(self.total_generated)
+        model = LinearRegression().fit(X, y)
+        future_days = np.arange(len(self.total_generated),
+                                len(self.total_generated) + days_ahead).reshape(-1, 1)
+        preds = model.predict(future_days)
+        return [int(p) for p in preds]
+
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="⚡ Energy Crisis Dashboard", layout="wide")
+
+st.title("⚡ Smart Energy Management Dashboard")
+st.markdown("### Monitoring Renewable Energy Generation & Predicting Shortages (AI Powered)")
+
+# Sidebar inputs
+daily_demand = st.sidebar.slider("Daily City Demand (kWh)", 10000, 30000, 15000, step=1000)
+days = st.sidebar.slider("Number of Simulation Days", 3, 14, 7)
+predict_days = st.sidebar.slider("Predict Future Days", 1, 7, 3)
+
+# Initialize system
+system = EnergyManagementSystem(daily_demand)
+system.add_source(EnergySource("Solar Plant", 6000))
+system.add_source(EnergySource("Wind Farm", 5000))
+system.add_source(EnergySource("Hydro Plant", 4000))
+system.add_source(EnergySource("Thermal Backup", 3000))
+
+# Run simulation
+st.subheader("🔋 Energy Generation Summary")
+for day in range(1, days + 1):
+    total_energy, shortage = system.simulate_day()
+    st.write(f"**Day {day}** — Total: {total_energy} kWh | Shortage: {shortage} kWh")
+    for src in system.sources:
+        st.progress(src.current_output / src.max_output)
+
+# Summary metrics
+st.subheader("📊 Summary Statistics")
+avg_generation = np.mean(system.total_generated)
+total_shortage = np.sum(system.shortage_history)
+col1, col2, col3 = st.columns(3)
+col1.metric("Average Daily Generation", f"{int(avg_generation)} kWh")
+col2.metric("Total Shortage", f"{int(total_shortage)} kWh")
+col3.metric("Demand Level", f"{daily_demand} kWh")
+
+# Visualization
+st.subheader("📈 Energy Generation vs Demand")
+fig, ax = plt.subplots(figsize=(8, 4))
+ax.plot(range(1, len(system.total_generated) + 1), system.total_generated,
+        marker='o', color='green', label='Generated Energy')
+ax.axhline(y=system.daily_demand, color='blue', linestyle='--', label='Daily Demand')
+ax.bar(range(1, len(system.shortage_history) + 1), system.shortage_history,
+       color='red', alpha=0.3, label='Shortage (kWh)')
+ax.set_xlabel("Day")
+ax.set_ylabel("Energy (kWh)")
+ax.legend()
+ax.grid(True)
+st.pyplot(fig)
+
+# AI Prediction
+st.subheader("🤖 AI Forecast (Next Days)")
+predictions = system.predict_future(predict_days)
+if predictions:
+    for i, pred in enumerate(predictions, 1):
+        shortage = max(0, system.daily_demand - pred)
+        status = "⚠️ Shortage Expected" if shortage > 0 else "✅ Sufficient Supply"
+        st.write(f"**Day +{i}:** Predicted {pred} kWh — {status}")
+else:
+    st.warning("Not enough data for AI prediction yet. Try simulating more days.")
+
+# Tips
+st.subheader("💡 Energy Conservation Suggestions")
+st.info("""
+- Switch to renewable energy sources where possible.  
+- Install **smart meters** for real-time tracking.  
+- Promote **energy-efficient lighting & appliances**.  
+- Encourage **EVs** and **public transport**.  
+- Store surplus energy using **battery systems**.  
+""")
