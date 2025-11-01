@@ -1,0 +1,122 @@
+import random
+import pandas as pd
+
+# -------------------- HOSPITAL CLASS --------------------
+class Hospital:
+    def __init__(self, name, capacity, location):
+        self.name = name
+        self.capacity = capacity
+        self.location = location
+        self.current_patients = 0
+
+    def admit_patient(self, num=1):
+        if self.current_patients + num <= self.capacity:
+            self.current_patients += num
+            return True
+        else:
+            return False
+
+    def available_beds(self):
+        return self.capacity - self.current_patients
+
+    def overload_status(self):
+        if self.current_patients > self.capacity:
+            return "Overloaded"
+        elif self.current_patients == self.capacity:
+            return "Full"
+        else:
+            return "Available"
+
+    def __repr__(self):
+        return (f"Hospital {self.name} | Location: {self.location} | "
+                f"Patients: {self.current_patients}/{self.capacity} | Status: {self.overload_status()}")
+
+
+# -------------------- PATIENT CLASS --------------------
+class Patient:
+    def __init__(self, patient_id, urgency_level):
+        self.patient_id = patient_id
+        self.urgency_level = urgency_level  # 1: low, 2: medium, 3: high
+        self.assigned_hospital = None
+
+    def assign_hospital(self, hospital: Hospital):
+        if hospital.admit_patient():
+            self.assigned_hospital = hospital.name
+            return True
+        return False
+
+    def __repr__(self):
+        return f"Patient {self.patient_id} | Urgency: {self.urgency_level} | Hospital: {self.assigned_hospital}"
+
+
+# -------------------- HEALTHCARE SYSTEM --------------------
+class HealthcareSystem:
+    def __init__(self):
+        self.hospitals = []
+        self.patients = []
+
+    def add_hospital(self, hospital: Hospital):
+        self.hospitals.append(hospital)
+
+    def add_patient(self, patient: Patient):
+        self.patients.append(patient)
+
+    def allocate_patients(self):
+        """Allocate patients based on urgency and hospital availability"""
+        # Sort patients by urgency (high first)
+        self.patients.sort(key=lambda p: p.urgency_level, reverse=True)
+
+        for patient in self.patients:
+            # Skip if already assigned
+            if patient.assigned_hospital:
+                continue
+
+            # Try to assign patient to nearest available hospital
+            sorted_hospitals = sorted(self.hospitals, key=lambda h: h.available_beds(), reverse=True)
+            for hospital in sorted_hospitals:
+                if patient.assign_hospital(hospital):
+                    break
+
+    def report(self):
+        print("\n🏥 Hospital Status Report:")
+        for h in self.hospitals:
+            print(h)
+
+        print("\n🧍 Patient Allocation Report:")
+        for p in self.patients:
+            print(p)
+
+    def summary(self):
+        total_patients = len(self.patients)
+        assigned = sum(1 for p in self.patients if p.assigned_hospital)
+        unassigned = total_patients - assigned
+        print("\n📊 Summary:")
+        print(f"Total Patients: {total_patients}")
+        print(f"Patients Assigned to Hospital: {assigned}")
+        print(f"Patients Unassigned: {unassigned}")
+
+
+# -------------------- SIMULATION --------------------
+def main():
+    system = HealthcareSystem()
+
+    # Add hospitals
+    system.add_hospital(Hospital("City General", 50, "Downtown"))
+    system.add_hospital(Hospital("North Health Center", 30, "North Side"))
+    system.add_hospital(Hospital("East Clinic", 20, "East Side"))
+
+    # Generate random patients
+    for i in range(1, 81):
+        urgency = random.choice([1, 2, 3])  # 1: low, 3: high
+        system.add_patient(Patient(i, urgency))
+
+    # Allocate patients
+    system.allocate_patients()
+
+    # Reports
+    system.report()
+    system.summary()
+
+
+if __name__ == "__main__":
+    main()
