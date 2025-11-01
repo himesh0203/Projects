@@ -1,0 +1,84 @@
+import random
+import time
+
+class WasteBin:
+    def __init__(self, bin_id, location, capacity=100):
+        self.bin_id = bin_id
+        self.location = location
+        self.capacity = capacity  # Maximum capacity in kg
+        self.current_level = 0    # Current waste level in kg
+        self.last_collected = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def add_waste(self, amount):
+        """Simulate adding waste to the bin."""
+        if self.current_level + amount > self.capacity:
+            self.current_level = self.capacity
+        else:
+            self.current_level += amount
+
+    def is_full(self):
+        """Check if the bin is full."""
+        return self.current_level >= self.capacity * 0.9  # 90% threshold
+
+    def empty_bin(self):
+        """Empty the waste bin."""
+        print(f"🧹 Collecting waste from bin {self.bin_id} at {self.location}")
+        self.current_level = 0
+        self.last_collected = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def __repr__(self):
+        percent_full = (self.current_level / self.capacity) * 100
+        return (f"Bin {self.bin_id} | Location: {self.location} | "
+                f"Fill: {percent_full:.1f}% | Last Collected: {self.last_collected}")
+
+class WasteManagementSystem:
+    def __init__(self):
+        self.bins = []
+
+    def add_bin(self, bin):
+        self.bins.append(bin)
+
+    def simulate_waste_generation(self):
+        """Simulate random waste filling in bins."""
+        for bin in self.bins:
+            added_waste = random.randint(5, 30)
+            bin.add_waste(added_waste)
+
+    def monitor_bins(self):
+        """Display all bins and their status."""
+        print("\n📊 Current Waste Bin Status:")
+        for bin in self.bins:
+            print(bin)
+
+    def schedule_collection(self):
+        """Find and collect from bins that are nearly full."""
+        print("\n🚛 Scheduling waste collection...")
+        for bin in self.bins:
+            if bin.is_full():
+                bin.empty_bin()
+
+    def run_cycle(self):
+        """Run one full monitoring and collection cycle."""
+        self.simulate_waste_generation()
+        self.monitor_bins()
+        self.schedule_collection()
+
+# ------------------- Main Simulation -------------------
+
+def main():
+    system = WasteManagementSystem()
+
+    # Create bins in different locations
+    system.add_bin(WasteBin(1, "Downtown"))
+    system.add_bin(WasteBin(2, "City Park"))
+    system.add_bin(WasteBin(3, "Residential Area"))
+    system.add_bin(WasteBin(4, "Industrial Zone"))
+
+    # Simulate continuous operation
+    for cycle in range(1, 6):  # Run 5 cycles
+        print(f"\n===== 🌆 Waste Management Cycle {cycle} =====")
+        system.run_cycle()
+        time.sleep(2)  # Wait before next cycle (for simulation)
+
+if __name__ == "__main__":
+    main()
