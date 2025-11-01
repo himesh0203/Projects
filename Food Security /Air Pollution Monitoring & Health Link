@@ -1,0 +1,14 @@
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Fetch live air quality data (example using OpenAQ API)
+url = "https://api.openaq.org/v2/latest?city=Delhi&parameter=pm25"
+response = requests.get(url).json()
+results = response['results']
+
+for location in results:
+    pm25 = location['measurements'][0]['value']
+    print(f"{location['location']} PM2.5: {pm25} μg/m³")
+    if pm25 > 100:
+        print("⚠️ High Pollution Alert!")
