@@ -1,0 +1,124 @@
+import random
+
+# -------------------- 1. Urban Waste Management --------------------
+def urban_waste_management():
+    bins = ["Organic", "Plastic", "Metal", "E-Waste"]
+    collected = {bin_type: random.randint(50, 200) for bin_type in bins}
+    print("🗑️ Waste Collection Summary:")
+    for k, v in collected.items():
+        print(f"{k}: {v} kg collected")
+
+# -------------------- 2. Adult Education --------------------
+def adult_education():
+    adults = ["Alice", "Bob", "Charlie", "Diana"]
+    learning_progress = {a: random.randint(0, 100) for a in adults}
+    print("\n📚 Adult Education Progress:")
+    for a, p in learning_progress.items():
+        print(f"{a}: {p}% course completed")
+
+# -------------------- 3. City Pollution --------------------
+def city_pollution():
+    pollutants = {"PM2.5": random.uniform(50, 200),
+                  "PM10": random.uniform(80, 250),
+                  "CO": random.uniform(0.5, 5)}
+    print("\n🌫️ City Pollution Levels (µg/m³ or ppm):")
+    for k, v in pollutants.items():
+        print(f"{k}: {v:.2f}")
+
+# -------------------- 4. Public Transportation --------------------
+def public_transport():
+    buses = random.randint(50, 200)
+    metro_trains = random.randint(10, 50)
+    print(f"\n🚍 Public Transport Fleet:\nBuses: {buses}\nMetro Trains: {metro_trains}")
+
+# -------------------- 5. Sanitation --------------------
+def sanitation():
+    public_toilets = random.randint(50, 150)
+    clean_toilets = random.randint(30, public_toilets)
+    print(f"\n🚽 Sanitation Status:\nTotal Toilets: {public_toilets}\nClean Toilets: {clean_toilets}")
+
+# -------------------- 6. Women & Child Safety --------------------
+def safety():
+    safe_zones = random.randint(10, 50)
+    incidents_reported = random.randint(0, 20)
+    print(f"\n🛡️ Women & Child Safety:\nSafe Zones: {safe_zones}\nIncidents Reported: {incidents_reported}")
+
+# -------------------- 7. Water Management --------------------
+def water_management():
+    daily_consumption = random.randint(5000, 20000)  # in liters
+    recycled_water = daily_consumption * random.uniform(0.2, 0.5)
+    print(f"\n💧 Water Management:\nDaily Consumption: {daily_consumption} L\nRecycled Water: {int(recycled_water)} L")
+
+# -------------------- 8. Disabled Friendly Infrastructure --------------------
+def disabled_infrastructure():
+    ramps = random.randint(50, 150)
+    lifts = random.randint(20, 50)
+    print(f"\n♿ Disabled Friendly Infrastructure:\nRamps: {ramps}\nLifts: {lifts}")
+
+# -------------------- 9. Energy Crisis --------------------
+def energy_crisis():
+    total_energy = random.randint(10000, 50000)  # in kWh
+    renewable_energy = total_energy * random.uniform(0.2, 0.6)
+    print(f"\n⚡ Energy Management:\nTotal Energy: {total_energy} kWh\nRenewable Energy: {int(renewable_energy)} kWh")
+
+# -------------------- 10. Expensive Office Space --------------------
+def office_space():
+    avg_rent = random.randint(2000, 10000)
+    available_space = random.randint(50, 300)  # in sq.m
+    print(f"\n🏢 Office Space:\nAverage Rent: ${avg_rent}/month\nAvailable Space: {available_space} sq.m")
+
+# -------------------- 11. Access to Healthcare --------------------
+def healthcare():
+    hospitals = random.randint(20, 50)
+    doctors = random.randint(100, 500)
+    print(f"\n🏥 Healthcare Access:\nHospitals: {hospitals}\nDoctors: {doctors}")
+
+# -------------------- 12. Financial Inclusion --------------------
+def financial_inclusion():
+    bank_accounts_opened = random.randint(1000, 5000)
+    loans_disbursed = random.randint(100, 1000)
+    print(f"\n💰 Financial Inclusion:\nAccounts Opened: {bank_accounts_opened}\nLoans Disbursed: {loans_disbursed}")
+
+# -------------------- 13. Agricultural Solutions --------------------
+def agricultural_solutions():
+    crops_planted = random.randint(100, 500)
+    harvest_yield = crops_planted * random.randint(5, 20)  # in tons
+    print(f"\n🌾 Agricultural Solutions:\nCrops Planted: {crops_planted}\nExpected Harvest: {harvest_yield} tons")
+
+# -------------------- 14. Employment Generation --------------------
+def employment_generation():
+    new_jobs = random.randint(50, 300)
+    sectors = ["IT", "Manufacturing", "Service", "Retail"]
+    print(f"\n👷 Employment Generation:\nNew Jobs Created: {new_jobs}")
+    print("Jobs by Sector:")
+    for sector in sectors:
+        print(f"{sector}: {random.randint(5, 50)}")
+
+# -------------------- 15. Urban Infrastructure --------------------
+def urban_infrastructure():
+    roads_built = random.randint(10, 50)  # in km
+    bridges_built = random.randint(1, 10)
+    print(f"\n🏗️ Urban Infrastructure:\nRoads Built: {roads_built} km\nBridges Built: {bridges_built}")
+
+# -------------------- MAIN SIMULATION --------------------
+def main():
+    print("🌆 Urban & Social Solutions Simulator")
+    
+    urban_waste_management()
+    adult_education()
+    city_pollution()
+    public_transport()
+    sanitation()
+    safety()
+    water_management()
+    disabled_infrastructure()
+    energy_crisis()
+    office_space()
+    healthcare()
+    financial_inclusion()
+    agricultural_solutions()
+    employment_generation()
+    urban_infrastructure()
+
+if __name__ == "__main__":
+    main()
