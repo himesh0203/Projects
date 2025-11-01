@@ -1,0 +1,77 @@
+import random
+import pandas as pd
+
+# -------------------- INDIVIDUAL CLASS --------------------
+class Individual:
+    def __init__(self, name, income, savings_rate):
+        self.name = name
+        self.income = income
+        self.savings_rate = savings_rate  # Fraction of income saved
+        self.savings = 0
+
+    def save(self):
+        saved_amount = self.income * self.savings_rate
+        self.savings += saved_amount
+        return saved_amount
+
+    def invest(self, interest_rate):
+        # Simple interest investment
+        investment_return = self.savings * interest_rate
+        self.savings += investment_return
+        return investment_return
+
+# -------------------- ECONOMY CLASS --------------------
+class Economy:
+    def __init__(self):
+        self.individuals = []
+        self.total_capital = 0
+
+    def add_individual(self, individual: Individual):
+        self.individuals.append(individual)
+
+    def simulate_year(self, interest_rate=0.05):
+        yearly_savings = 0
+        yearly_investment_return = 0
+        for person in self.individuals:
+            yearly_savings += person.save()
+            yearly_investment_return += person.invest(interest_rate)
+        self.total_capital += yearly_savings + yearly_investment_return
+        return yearly_savings, yearly_investment_return
+
+    def report(self):
+        data = []
+        for person in self.individuals:
+            data.append({
+                "Individual": person.name,
+                "Income": person.income,
+                "Savings Rate": person.savings_rate,
+                "Total Savings": round(person.savings, 2)
+            })
+        return pd.DataFrame(data)
+
+# -------------------- SIMULATION --------------------
+def main():
+    economy = Economy()
+
+    # Add individuals to the economy
+    economy.add_individual(Individual("Alice", income=50000, savings_rate=0.2))
+    economy.add_individual(Individual("Bob", income=40000, savings_rate=0.15))
+    economy.add_individual(Individual("Charlie", income=60000, savings_rate=0.25))
+    economy.add_individual(Individual("Diana", income=45000, savings_rate=0.18))
+
+    years = 5
+    interest_rate = 0.05
+
+    print(f"💹 Capital Formation Simulation for {years} years\n")
+
+    for year in range(1, years+1):
+        savings, investment = economy.simulate_year(interest_rate)
+        print(f"Year {year}: Total Savings = {round(savings,2)}, Investment Returns = {round(investment,2)}, Total Capital = {round(economy.total_capital,2)}")
+
+    # Detailed report
+    report_df = economy.report()
+    print("\n📊 Individual Savings Report:")
+    print(report_df)
+
+if __name__ == "__main__":
+    main()
