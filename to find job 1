@@ -1,0 +1,96 @@
+from datetime import datetime
+
+# -------------------- JOB PORTAL CLASS --------------------
+class JobPortal:
+    def __init__(self):
+        self.jobs = []  # List of job postings
+        self.applications = []  # List of applications
+
+    # -------------------- POST JOB --------------------
+    def post_job(self, company_name, job_title, location, salary):
+        job = {
+            "Job ID": len(self.jobs) + 1,
+            "Company": company_name,
+            "Title": job_title,
+            "Location": location,
+            "Salary": salary,
+            "Posted At": datetime.now()
+        }
+        self.jobs.append(job)
+        print(f"✅ Job '{job_title}' posted by {company_name}!")
+
+    # -------------------- VIEW JOBS --------------------
+    def view_jobs(self):
+        if not self.jobs:
+            print("No jobs posted yet.")
+            return
+        print("\n💼 Available Jobs:")
+        for job in self.jobs:
+            print(f"{job['Job ID']}. {job['Title']} at {job['Company']} | Location: {job['Location']} | Salary: ${job['Salary']}")
+
+    # -------------------- APPLY FOR JOB --------------------
+    def apply_job(self, job_id, candidate_name):
+        job = next((j for j in self.jobs if j["Job ID"] == job_id), None)
+        if not job:
+            print("Job not found!")
+            return
+        application = {
+            "Candidate": candidate_name,
+            "Job ID": job_id,
+            "Job Title": job["Title"],
+            "Company": job["Company"],
+            "Applied At": datetime.now()
+        }
+        self.applications.append(application)
+        print(f"✅ {candidate_name} applied for '{job['Title']}' at {job['Company']}!")
+
+    # -------------------- VIEW APPLICATIONS --------------------
+    def view_applications(self):
+        if not self.applications:
+            print("No applications yet.")
+            return
+        print("\n📝 Applications:")
+        for app in self.applications:
+            print(f"{app['Candidate']} applied for '{app['Job Title']}' at {app['Company']} on {app['Applied At'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+# -------------------- SIMULATION --------------------
+def main():
+    portal = JobPortal()
+    print("💼 Welcome to the Job Portal")
+
+    while True:
+        print("\nSelect your role:")
+        print("1. Company Owner / Director (Post Job)")
+        print("2. Recruiter / Candidate (Search and Apply for Job)")
+        print("3. View All Applications")
+        print("4. Exit")
+
+        choice = input("Enter your choice (1-4): ")
+
+        if choice == "1":
+            company_name = input("Company Name: ")
+            job_title = input("Job Title: ")
+            location = input("Location: ")
+            salary = float(input("Salary ($): "))
+            portal.post_job(company_name, job_title, location, salary)
+
+        elif choice == "2":
+            portal.view_jobs()
+            if portal.jobs:
+                apply = input("Do you want to apply for a job? (yes/no): ").lower()
+                if apply == "yes":
+                    job_id = int(input("Enter Job ID to apply: "))
+                    candidate_name = input("Enter your name: ")
+                    portal.apply_job(job_id, candidate_name)
+
+        elif choice == "3":
+            portal.view_applications()
+
+        elif choice == "4":
+            print("Goodbye! 💼")
+            break
+        else:
+            print("Invalid choice! Please select 1-4.")
+
+if __name__ == "__main__":
+    main()
