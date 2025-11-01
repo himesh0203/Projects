@@ -1,0 +1,96 @@
+import tkinter as tk
+from tkinter import messagebox
+
+# List to store all ratings
+all_ratings = []
+
+# Function to submit ratings
+def submit_ratings():
+    try:
+        food = int(food_entry.get())
+        road = int(road_entry.get())
+        education = int(education_entry.get())
+        water = int(water_entry.get())
+        electricity = int(electricity_entry.get())
+        
+        # Validate ratings
+        if any(r < 1 or r > 5 for r in [food, road, education, water, electricity]):
+            messagebox.showerror("Error", "Please enter ratings between 1 and 5")
+            return
+        
+        # Store ratings
+        all_ratings.append({
+            "Food": food,
+            "Road": road,
+            "Education": education,
+            "Water": water,
+            "Electricity": electricity
+        })
+        
+        messagebox.showinfo("Success", "Ratings submitted successfully!")
+        
+        # Clear entry fields
+        food_entry.delete(0, tk.END)
+        road_entry.delete(0, tk.END)
+        education_entry.delete(0, tk.END)
+        water_entry.delete(0, tk.END)
+        electricity_entry.delete(0, tk.END)
+        
+    except ValueError:
+        messagebox.showerror("Error", "Please enter valid numbers")
+
+# Function to show average ratings
+def show_averages():
+    if not all_ratings:
+        messagebox.showinfo("No Data", "No ratings submitted yet.")
+        return
+    
+    # Calculate averages
+    averages = {
+        "Food": sum(r["Food"] for r in all_ratings)/len(all_ratings),
+        "Road": sum(r["Road"] for r in all_ratings)/len(all_ratings),
+        "Education": sum(r["Education"] for r in all_ratings)/len(all_ratings),
+        "Water": sum(r["Water"] for r in all_ratings)/len(all_ratings),
+        "Electricity": sum(r["Electricity"] for r in all_ratings)/len(all_ratings),
+    }
+    
+    # Display averages
+    result_text = "\n".join(f"{key} Average: {value:.2f}" for key, value in averages.items())
+    messagebox.showinfo("Average Ratings", result_text)
+
+# Create main window
+root = tk.Tk()
+root.title("Community Service Ratings")
+root.geometry("400x400")
+
+# Labels and entry fields
+tk.Label(root, text="Rate the following services (1-5):", font=("Arial", 14)).pack(pady=10)
+
+tk.Label(root, text="Food Quality:").pack()
+food_entry = tk.Entry(root)
+food_entry.pack()
+
+tk.Label(root, text="Road Quality:").pack()
+road_entry = tk.Entry(root)
+road_entry.pack()
+
+tk.Label(root, text="Education Quality:").pack()
+education_entry = tk.Entry(root)
+education_entry.pack()
+
+tk.Label(root, text="Water Quality:").pack()
+water_entry = tk.Entry(root)
+water_entry.pack()
+
+tk.Label(root, text="Electricity Availability:").pack()
+electricity_entry = tk.Entry(root)
+electricity_entry.pack()
+
+# Buttons
+submit_button = tk.Button(root, text="Submit Ratings", command=submit_ratings)
+submit_button.pack(pady=10)
+
+average_button = tk.Button(root, text="Show Average Ratings", command=show_averages)
+average_button.pack(pady=10)
+
+root.mainloop()
