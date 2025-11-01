@@ -1,0 +1,177 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime, timedelta
+
+# -------------------- SETUP --------------------
+st.set_page_config(page_title="🌆 Full City Management Dashboard", layout="wide")
+st.title("🌆 Full City Management Dashboard")
+st.markdown("Monitor, simulate, and plan interventions for all urban and social issues.")
+
+# -------------------- Helper Functions --------------------
+def generate_trend_data(days=30, min_val=10, max_val=100):
+    dates = [datetime.today() - timedelta(days=i) for i in range(days)]
+    values = [random.randint(min_val, max_val) for _ in range(days)]
+    df = pd.DataFrame({"Date": dates, "Value": values})
+    return df.sort_values("Date")
+
+def plot_trend(df, title, ylabel):
+    fig, ax = plt.subplots(figsize=(8,3))
+    sns.lineplot(data=df, x="Date", y="Value", marker="o", ax=ax)
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("Date")
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+
+def simulate_intervention(current_value, increase_percent):
+    return int(current_value * (1 + increase_percent/100))
+
+# -------------------- Sidebar Filters & Interventions --------------------
+st.sidebar.header("Filters & Interventions")
+days = st.sidebar.slider("Select Number of Days for Trend", 7, 60, 30)
+
+# Thresholds
+pollution_threshold = st.sidebar.slider("PM2.5 Alert Threshold", 50, 300, 100)
+sanitation_threshold = st.sidebar.slider("Minimum Clean Toilets (%)", 30, 100, 60)
+healthcare_threshold = st.sidebar.slider("Minimum Doctors", 50, 500)
+
+# What-if Interventions
+st.sidebar.markdown("### What-If Interventions")
+increase_sanitation = st.sidebar.slider("Increase Sanitation (%)", 0, 100, 0)
+increase_renewable = st.sidebar.slider("Increase Renewable Energy (%)", 0, 100, 0)
+increase_healthcare = st.sidebar.slider("Increase Doctors (%)", 0, 100, 0)
+
+# -------------------- Tabs for Each Issue --------------------
+tabs = st.tabs([
+    "Urban Waste", "Adult Education", "City Pollution", "Public Transport", "Sanitation",
+    "Women & Child Safety", "Water Management", "Disabled Infrastructure", "Energy Crisis",
+    "Expensive Office", "Healthcare Access", "Financial Inclusion", "Agriculture", 
+    "Employment", "Urban Infrastructure"
+])
+
+# -------------------- 1. Urban Waste Management --------------------
+with tabs[0]:
+    st.subheader("🗑️ Urban Waste Management")
+    waste_types = ["Organic", "Plastic", "Metal", "E-Waste"]
+    for waste_type in waste_types:
+        waste_df = generate_trend_data(days, 50, 300)
+        plot_trend(waste_df, f"{waste_type} Waste Collected", "kg")
+
+# -------------------- 2. Adult Education --------------------
+with tabs[1]:
+    st.subheader("📚 Adult Education Progress")
+    adults = ["Alice", "Bob", "Charlie", "Diana"]
+    for name in adults:
+        progress = random.randint(0, 100)
+        st.text(f"{name}: {progress}% completed")
+        st.progress(progress)
+
+# -------------------- 3. City Pollution --------------------
+with tabs[2]:
+    st.subheader("🌫️ City Pollution Trend")
+    pollution_df = generate_trend_data(days, 50, 200)
+    plot_trend(pollution_df, "PM2.5 Levels Over Time", "µg/m³")
+    latest_pollution = pollution_df['Value'].iloc[-1]
+    if latest_pollution > pollution_threshold:
+        st.error(f"⚠️ Current PM2.5 ({latest_pollution}) exceeds safe threshold ({pollution_threshold})!")
+
+# -------------------- 4. Public Transportation --------------------
+with tabs[3]:
+    st.subheader("🚍 Public Transportation")
+    transport_modes = ["Buses", "Metro", "Trams"]
+    for mode in transport_modes:
+        fleet_df = generate_trend_data(days, 10, 200)
+        plot_trend(fleet_df, f"{mode} Fleet Over Time", "Units")
+
+# -------------------- 5. Sanitation --------------------
+with tabs[4]:
+    st.subheader("🚽 Sanitation Trend")
+    sanitation_df = generate_trend_data(days, 30, 100)
+    sanitation_df["Value"] = sanitation_df["Value"].apply(lambda x: simulate_intervention(x, increase_sanitation))
+    plot_trend(sanitation_df, "Clean Toilets (%) Over Time", "% Clean")
+    latest_sanitation = sanitation_df['Value'].iloc[-1]
+    if latest_sanitation < sanitation_threshold:
+        st.warning(f"⚠️ Clean toilets ({latest_sanitation}%) are below threshold ({sanitation_threshold}%)!")
+
+# -------------------- 6. Women & Child Safety --------------------
+with tabs[5]:
+    st.subheader("🛡️ Women & Child Safety")
+    safe_zones = random.randint(10, 50)
+    incidents = random.randint(0, 20)
+    st.write(f"Safe Zones: {safe_zones}, Incidents Reported: {incidents}")
+
+# -------------------- 7. Water Management --------------------
+with tabs[6]:
+    st.subheader("💧 Water Management")
+    water_df = generate_trend_data(days, 5000, 20000)
+    recycled_df = water_df["Value"].apply(lambda x: int(x*random.uniform(0.2,0.5)))
+    plot_trend(pd.DataFrame({"Date": water_df["Date"], "Value": recycled_df}), "Recycled Water Over Time", "Liters")
+
+# -------------------- 8. Disabled Friendly Infrastructure --------------------
+with tabs[7]:
+    st.subheader("♿ Disabled Infrastructure")
+    ramps = random.randint(50, 150)
+    lifts = random.randint(20, 50)
+    st.write(f"Ramps: {ramps}, Lifts: {lifts}")
+    plot_trend(pd.DataFrame({"Date": list(range(days)), "Value": [ramps]*days}), "Ramps Trend", "Units")
+    plot_trend(pd.DataFrame({"Date": list(range(days)), "Value": [lifts]*days}), "Lifts Trend", "Units")
+
+# -------------------- 9. Energy Crisis --------------------
+with tabs[8]:
+    st.subheader("⚡ Energy Management")
+    energy_df = generate_trend_data(days, 10000, 50000)
+    renewable_df = energy_df["Value"].apply(lambda x: simulate_intervention(x, increase_renewable))
+    plot_trend(renewable_df.to_frame(name="Value"), "Renewable Energy Over Time", "kWh")
+
+# -------------------- 10. Expensive Office Space --------------------
+with tabs[9]:
+    st.subheader("🏢 Expensive Office Space")
+    avg_rent = random.randint(2000, 10000)
+    available_space = random.randint(50, 300)
+    st.write(f"Average Rent: ${avg_rent}/month, Available Space: {available_space} sq.m")
+
+# -------------------- 11. Access to Healthcare --------------------
+with tabs[10]:
+    st.subheader("🏥 Healthcare Access")
+    health_df = generate_trend_data(days, 50, 500)
+    health_df["Value"] = health_df["Value"].apply(lambda x: simulate_intervention(x, increase_healthcare))
+    plot_trend(health_df, "Doctors Over Time", "Number of Doctors")
+    latest_doctors = health_df["Value"].iloc[-1]
+    if latest_doctors < healthcare_threshold:
+        st.warning(f"⚠️ Doctors ({latest_doctors}) below threshold ({healthcare_threshold})!")
+
+# -------------------- 12. Financial Inclusion --------------------
+with tabs[11]:
+    st.subheader("💰 Financial Inclusion")
+    bank_accounts = random.randint(1000, 5000)
+    loans_disbursed = random.randint(100, 1000)
+    st.write(f"Bank Accounts Opened: {bank_accounts}, Loans Disbursed: {loans_disbursed}")
+
+# -------------------- 13. Agricultural Solutions --------------------
+with tabs[12]:
+    st.subheader("🌾 Agricultural Solutions")
+    crops_planted = random.randint(100, 500)
+    harvest_yield = crops_planted * random.randint(5, 20)
+    st.write(f"Crops Planted: {crops_planted}, Expected Harvest: {harvest_yield} tons")
+
+# -------------------- 14. Employment Generation --------------------
+with tabs[13]:
+    st.subheader("👷 Employment Generation")
+    new_jobs = random.randint(50, 300)
+    sectors = ["IT", "Manufacturing", "Service", "Retail"]
+    jobs_by_sector = {s: random.randint(5,50) for s in sectors}
+    st.write(f"New Jobs Created: {new_jobs}")
+    plot_trend(pd.DataFrame({"Date": list(range(len(sectors))), "Value": list(jobs_by_sector.values())}), "Jobs by Sector", "Jobs")
+
+# -------------------- 15. Urban Infrastructure --------------------
+with tabs[14]:
+    st.subheader("🏗️ Urban Infrastructure")
+    roads_built = random.randint(10, 50)
+    bridges_built = random.randint(1, 10)
+    st.write(f"Roads Built: {roads_built} km, Bridges Built: {bridges_built}")
+    plot_trend(pd.DataFrame({"Date": list(range(days)), "Value": [roads_built]*days}), "Roads Built Trend", "km")
+    plot_trend(pd.DataFrame({"Date": list(range(days)), "Value": [bridges_built]*days}), "Bridges Built Trend", "Units")
