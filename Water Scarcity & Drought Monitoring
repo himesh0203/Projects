@@ -1,0 +1,28 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import requests
+
+# Example: Fetch rainfall data (replace with real API)
+# Using a placeholder CSV for demonstration
+df = pd.read_csv("rainfall_data.csv")  # columns: ['Date','Region','Rainfall_mm']
+
+# Convert Date column to datetime
+df['Date'] = pd.to_datetime(df['Date'])
+
+# Aggregate monthly rainfall
+monthly_rainfall = df.groupby(pd.Grouper(key='Date', freq='M'))['Rainfall_mm'].sum()
+
+# Plot
+plt.figure(figsize=(10,5))
+plt.plot(monthly_rainfall.index, monthly_rainfall.values, marker='o')
+plt.title("Monthly Rainfall")
+plt.xlabel("Month")
+plt.ylabel("Rainfall (mm)")
+plt.grid(True)
+plt.show()
+
+# Alert for drought if rainfall < threshold
+drought_threshold = 50  # mm per month
+for date, rain in monthly_rainfall.items():
+    if rain < drought_threshold:
+        print(f"⚠️ Drought Alert: {date.strftime('%Y-%m')} with rainfall {rain} mm")
