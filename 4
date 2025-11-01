@@ -1,0 +1,97 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime, timedelta
+
+# -------------------- SETUP --------------------
+st.set_page_config(page_title="🌆 City Management Dashboard", layout="wide")
+st.title("🌆 City Management Dashboard: Trends & What-If Simulation")
+st.markdown("Analyze historical trends and simulate interventions for urban issues.")
+
+# -------------------- Helper Functions --------------------
+def generate_trend_data(days=30, min_val=10, max_val=100):
+    dates = [datetime.today() - timedelta(days=i) for i in range(days)]
+    values = [random.randint(min_val, max_val) for _ in range(days)]
+    df = pd.DataFrame({"Date": dates, "Value": values})
+    return df.sort_values("Date")
+
+def plot_trend(df, title, ylabel):
+    fig, ax = plt.subplots(figsize=(8,4))
+    sns.lineplot(data=df, x="Date", y="Value", marker="o", ax=ax)
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("Date")
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+
+def simulate_intervention(current_value, increase_percent):
+    return int(current_value * (1 + increase_percent/100))
+
+# -------------------- Sidebar Filters & Interventions --------------------
+st.sidebar.header("Simulation Controls")
+days = st.sidebar.slider("Select Number of Days for Trend", 7, 60, 30)
+pollution_threshold = st.sidebar.slider("PM2.5 Alert Threshold", 50, 300, 100)
+sanitation_threshold = st.sidebar.slider("Minimum Clean Toilets (%)", 30, 100, 60)
+healthcare_threshold = st.sidebar.slider("Minimum Doctors", 50, 500, 100)
+
+st.sidebar.markdown("### What-If Interventions")
+increase_sanitation = st.sidebar.slider("Increase Sanitation (%)", 0, 100, 0)
+increase_renewable = st.sidebar.slider("Increase Renewable Energy (%)", 0, 100, 0)
+increase_healthcare = st.sidebar.slider("Increase Doctors (%)", 0, 100, 0)
+
+# -------------------- 1. City Pollution --------------------
+st.subheader("🌫️ City Pollution Trend")
+pollution_df = generate_trend_data(days, 50, 200)
+plot_trend(pollution_df, "PM2.5 Levels Over Time", "µg/m³")
+latest_pollution = pollution_df['Value'].iloc[-1]
+if latest_pollution > pollution_threshold:
+    st.error(f"⚠️ Current PM2.5 ({latest_pollution} µg/m³) exceeds safe threshold ({pollution_threshold})!")
+
+# -------------------- 2. Sanitation --------------------
+st.subheader("🚽 Sanitation Trend")
+sanitation_df = generate_trend_data(days, 30, 100)
+sanitation_df["Value"] = sanitation_df["Value"].apply(lambda x: simulate_intervention(x, increase_sanitation))
+plot_trend(sanitation_df, "Clean Toilets (%) Over Time", "% Clean")
+latest_sanitation = sanitation_df['Value'].iloc[-1]
+if latest_sanitation < sanitation_threshold:
+    st.warning(f"⚠️ Clean toilets ({latest_sanitation}%) are below threshold ({sanitation_threshold}%)!")
+
+# -------------------- 3. Renewable Energy & Energy Crisis --------------------
+st.subheader("⚡ Energy Trend")
+energy_df = generate_trend_data(days, 10000, 50000)
+renewable_energy = energy_df["Value"].apply(lambda x: simulate_intervention(x, increase_renewable))
+plot_trend(renewable_energy.to_frame(name="Value"), "Renewable Energy Over Time", "kWh")
+
+# -------------------- 4. Healthcare Access --------------------
+st.subheader("🏥 Healthcare Trend")
+health_df = generate_trend_data(days, 50, 500)
+health_df["Value"] = health_df["Value"].apply(lambda x: simulate_intervention(x, increase_healthcare))
+plot_trend(health_df, "Doctors Availability Over Time", "Number of Doctors")
+latest_doctors = health_df["Value"].iloc[-1]
+if latest_doctors < healthcare_threshold:
+    st.warning(f"⚠️ Doctors available ({latest_doctors}) below threshold ({healthcare_threshold})!")
+
+# -------------------- 5. Urban Waste Management --------------------
+st.subheader("🗑️ Waste Management Trend")
+waste_types = ["Organic", "Plastic", "Metal", "E-Waste"]
+for waste_type in waste_types:
+    waste_df = generate_trend_data(days, 50, 300)
+    plot_trend(waste_df, f"{waste_type} Waste Collected", "kg")
+
+# -------------------- 6. Water Management --------------------
+st.subheader("💧 Water Usage Trend")
+water_df = generate_trend_data(days, 5000, 20000)
+recycled_df = water_df["Value"].apply(lambda x: int(x * random.uniform(0.2,0.5)))
+plot_trend(pd.DataFrame({"Date": water_df["Date"], "Value": recycled_df}), "Recycled Water Over Time", "Liters")
+
+# -------------------- 7. Other Modules (Summary) --------------------
+st.subheader("🏢 Other Urban & Social Modules")
+modules = ["Adult Education", "Public Transport", "Disabled Infrastructure", 
+           "Office Space", "Financial Inclusion", "Agriculture", "Employment", "Urban Infrastructure"]
+for module in modules:
+    value = random.randint(10, 100)
+    st.write(f"{module}: {value}")
+    st.progress(value)
