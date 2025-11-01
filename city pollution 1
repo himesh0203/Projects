@@ -1,0 +1,101 @@
+import random
+import pandas as pd
+
+# -------------------- POLLUTION SOURCE CLASS --------------------
+class PollutionSource:
+    def __init__(self, source_type, emission_rate):
+        self.source_type = source_type  # e.g., "Vehicle", "Factory", "Waste"
+        self.emission_rate = emission_rate  # Pollution units per day
+
+    def daily_pollution(self):
+        # Daily pollution may fluctuate +-20%
+        fluctuation = random.uniform(0.8, 1.2)
+        return self.emission_rate * fluctuation
+
+# -------------------- CITY ZONE CLASS --------------------
+class CityZone:
+    def __init__(self, name):
+        self.name = name
+        self.pollution_level = 0
+        self.sources = []
+
+    def add_source(self, source: PollutionSource):
+        self.sources.append(source)
+
+    def simulate_day(self):
+        self.pollution_level = sum(source.daily_pollution() for source in self.sources)
+
+    def pollution_status(self):
+        if self.pollution_level < 50:
+            return "Safe"
+        elif 50 <= self.pollution_level < 100:
+            return "Moderate"
+        else:
+            return "High Pollution"
+
+# -------------------- CITY POLLUTION SYSTEM --------------------
+class CityPollutionSystem:
+    def __init__(self):
+        self.zones = []
+
+    def add_zone(self, zone: CityZone):
+        self.zones.append(zone)
+
+    def simulate_day(self):
+        for zone in self.zones:
+            zone.simulate_day()
+
+    def report(self):
+        data = []
+        for zone in self.zones:
+            data.append({
+                "Zone": zone.name,
+                "Pollution Level": round(zone.pollution_level, 2),
+                "Status": zone.pollution_status(),
+                "Number of Sources": len(zone.sources)
+            })
+        return pd.DataFrame(data)
+
+    def high_pollution_zones(self):
+        return [zone.name for zone in self.zones if zone.pollution_level >= 100]
+
+# -------------------- SIMULATION --------------------
+def main():
+    city = CityPollutionSystem()
+    zones = ["Downtown", "Industrial Area", "Residential Area", "Suburbs", "City Park"]
+
+    # Initialize zones
+    for z in zones:
+        zone = CityZone(z)
+        # Randomly add sources
+        for _ in range(random.randint(2, 6)):
+            source_type = random.choice(["Vehicle", "Factory", "Waste"])
+            emission_rate = random.randint(10, 50)  # pollution units
+            zone.add_source(PollutionSource(source_type, emission_rate))
+        city.add_zone(zone)
+
+    # Simulate daily pollution
+    city.simulate_day()
+
+    # Generate report
+    report_df = city.report()
+    print("🌆 City Pollution Report:")
+    print(report_df)
+
+    high_polluted = city.high_pollution_zones()
+    if high_polluted:
+        print("\n⚠️ High Pollution Zones (Unsolved Problems):", ", ".join(high_polluted))
+    else:
+        print("\n✅ No zone has extreme pollution today. All zones under control.")
+
+    # Suggestions
+    print("\n💡 Suggestions to Reduce City Pollution:")
+    print("- Promote public transportation and reduce vehicle emissions.")
+    print("- Enforce stricter industrial emissions regulations.")
+    print("- Improve waste management and reduce open burning of trash.")
+    print("- Plant trees and maintain green zones in the city.")
+    print("- Encourage renewable energy use to reduce fossil fuel dependency.")
+
+
+if __name__ == "__main__":
+    main()
