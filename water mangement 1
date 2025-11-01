@@ -1,0 +1,127 @@
+import random
+import time
+import matplotlib.pyplot as plt
+
+# -------------------- WATER SOURCE CLASS --------------------
+class WaterSource:
+    def __init__(self, name, capacity):
+        self.name = name
+        self.capacity = capacity  # in liters
+        self.current_level = random.randint(int(0.4 * capacity), int(0.9 * capacity))  # initial random level
+
+    def use_water(self, amount):
+        """Simulate water consumption."""
+        self.current_level = max(0, self.current_level - amount)
+
+    def refill(self, amount):
+        """Add water to the source (e.g., from rainfall or water supply)."""
+        self.current_level = min(self.capacity, self.current_level + amount)
+
+    def usage_percentage(self):
+        """Returns percentage of capacity used."""
+        return round((self.current_level / self.capacity) * 100, 2)
+
+    def is_low(self, threshold=30):
+        """Check if water source level is below the threshold."""
+        return self.usage_percentage() < threshold
+
+    def __repr__(self):
+        return f"{self.name}: {self.current_level}L / {self.capacity}L ({self.usage_percentage()}%)"
+
+
+# -------------------- WATER MANAGEMENT SYSTEM --------------------
+class WaterManagementSystem:
+    def __init__(self):
+        self.sources = []
+
+    def add_source(self, source):
+        self.sources.append(source)
+
+    def simulate_daily_usage(self):
+        """Simulate random daily water usage for each source."""
+        for src in self.sources:
+            daily_usage = random.randint(500, 2000)
+            src.use_water(daily_usage)
+
+    def simulate_refill(self):
+        """Refill some sources (like tanks) randomly to simulate rainfall or supply."""
+        for src in self.sources:
+            if random.random() < 0.4:  # 40% chance of refill
+                refill_amount = random.randint(1000, 3000)
+                src.refill(refill_amount)
+
+    def monitor_status(self):
+        """Display current water levels."""
+        print("\n🚰 Current Water Source Levels:")
+        for src in self.sources:
+            print(f" - {src}")
+
+        low_sources = [src.name for src in self.sources if src.is_low()]
+        if low_sources:
+            print("\n⚠️ Low Water Alert! Sources running low:")
+            for s in low_sources:
+                print(f"   - {s}")
+        else:
+            print("\n✅ All water sources are at safe levels.")
+
+    def suggest_conservation_measures(self):
+        """Suggest water-saving measures based on current usage."""
+        print("\n💡 Water Conservation Suggestions:")
+        suggestions = [
+            "Fix leaking taps and pipelines immediately.",
+            "Use low-flow showerheads and faucets.",
+            "Harvest rainwater for gardening and cleaning.",
+            "Run dishwashers and washing machines with full loads.",
+            "Reuse greywater for toilets or irrigation."
+        ]
+        for tip in suggestions:
+            print(f"   - {tip}")
+
+    def visualize_water_levels(self):
+        """Display water levels in a bar chart."""
+        names = [src.name for src in self.sources]
+        levels = [src.usage_percentage() for src in self.sources]
+
+        plt.figure(figsize=(8, 5))
+        colors = ['blue' if lvl >= 40 else 'red' for lvl in levels]
+        bars = plt.bar(names, levels, color=colors)
+        plt.title("Water Storage Levels (%)")
+        plt.xlabel("Water Sources")
+        plt.ylabel("Current Capacity (%)")
+        plt.ylim(0, 100)
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+        for bar, lvl in zip(bars, levels):
+            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height()-5,
+                     f"{lvl}%", ha='center', color='white', fontweight='bold')
+
+        plt.show()
+
+    def run_cycle(self, days=5):
+        """Run a multi-day simulation of water management."""
+        for day in range(1, days + 1):
+            print(f"\n================= 🌊 Day {day} =================")
+            self.simulate_daily_usage()
+            if random.random() < 0.5:  # 50% chance of rainfall or supply
+                self.simulate_refill()
+            self.monitor_status()
+            time.sleep(1)
+        self.suggest_conservation_measures()
+        self.visualize_water_levels()
+
+
+# -------------------- MAIN SIMULATION --------------------
+def main():
+    system = WaterManagementSystem()
+
+    # Add different water sources
+    system.add_source(WaterSource("Reservoir", 50000))
+    system.add_source(WaterSource("Overhead Tank", 10000))
+    system.add_source(WaterSource("Community Borewell", 8000))
+    system.add_source(WaterSource("Rainwater Harvest Tank", 6000))
+
+    # Run simulation for 5 days
+    system.run_cycle(days=5)
+
+if __name__ == "__main__":
+    main()
