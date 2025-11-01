@@ -1,0 +1,102 @@
+import random
+import pandas as pd
+
+# -------------------- COMMUNITY CLASS --------------------
+class Community:
+    def __init__(self, name, population, access_level):
+        self.name = name
+        self.population = population
+        self.access_level = access_level  # 0=No Access, 1=Limited, 2=Moderate, 3=Full
+        self.adopted_technology = []
+
+    def adopt_technology(self, tech, adoption_rate):
+        """Simulate adoption based on access level and adoption_rate"""
+        if self.access_level == 0:
+            adoption = 0
+        else:
+            adoption = int(self.population * adoption_rate * (self.access_level/3))
+        self.adopted_technology.append((tech, adoption))
+        return adoption
+
+    def total_adopted(self):
+        return sum(adopted for _, adopted in self.adopted_technology)
+
+# -------------------- TECHNOLOGY CLASS --------------------
+class Technology:
+    def __init__(self, name, complexity, cost):
+        self.name = name
+        self.complexity = complexity  # 1=Easy, 2=Medium, 3=Hard
+        self.cost = cost  # Average cost per person
+
+# -------------------- DEMOCRATIZATION SYSTEM --------------------
+class TechnologyAccessSystem:
+    def __init__(self):
+        self.communities = []
+        self.technologies = []
+
+    def add_community(self, community: Community):
+        self.communities.append(community)
+
+    def add_technology(self, tech: Technology):
+        self.technologies.append(tech)
+
+    def simulate_adoption(self):
+        report = []
+        for community in self.communities:
+            for tech in self.technologies:
+                # Adoption rate inversely proportional to cost and complexity
+                adoption_rate = random.uniform(0.3, 0.9) * (1 / tech.complexity) * (1 / (tech.cost/100 + 1))
+                adopted = community.adopt_technology(tech.name, adoption_rate)
+                report.append({
+                    "Community": community.name,
+                    "Technology": tech.name,
+                    "Population": community.population,
+                    "Adopted": adopted,
+                    "Access Level": community.access_level
+                })
+        return pd.DataFrame(report)
+
+    def identify_barriers(self):
+        barriers = []
+        for community in self.communities:
+            if community.access_level < 2:
+                barriers.append(community.name)
+        return barriers
+
+# -------------------- SIMULATION --------------------
+def main():
+    system = TechnologyAccessSystem()
+
+    # Add communities
+    system.add_community(Community("Urban Center", 5000, access_level=3))
+    system.add_community(Community("Rural Area", 3000, access_level=1))
+    system.add_community(Community("Suburban Area", 4000, access_level=2))
+    system.add_community(Community("Remote Village", 1000, access_level=0))
+
+    # Add technologies
+    system.add_technology(Technology("Smartphone", complexity=1, cost=200))
+    system.add_technology(Technology("Solar Panels", complexity=2, cost=1000))
+    system.add_technology(Technology("Internet Access", complexity=2, cost=500))
+    system.add_technology(Technology("AI Education Platform", complexity=3, cost=100))
+
+    # Simulate adoption
+    adoption_report = system.simulate_adoption()
+    print("🌐 Technology Adoption Report:")
+    print(adoption_report)
+
+    # Identify communities with barriers
+    barriers = system.identify_barriers()
+    if barriers:
+        print("\n⚠️ Communities facing access barriers:", ", ".join(barriers))
+    else:
+        print("\n✅ All communities have sufficient technology access.")
+
+    # Suggestions
+    print("\n💡 Suggestions to Democratize Technology:")
+    print("- Subsidize costs for low-access communities.")
+    print("- Provide digital literacy programs to improve adoption.")
+    print("- Invest in infrastructure to extend internet and energy access.")
+    print("- Partner with local organizations to distribute technology effectively.")
+
+if __name__ == "__main__":
+    main()
