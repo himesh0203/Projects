@@ -1,0 +1,75 @@
+import pandas as pd
+from datetime import datetime, timedelta
+import random
+
+# -------------------- DRUG CLASS --------------------
+class Drug:
+    def __init__(self, name, quantity, cost_per_unit, expiry_date):
+        self.name = name
+        self.quantity = quantity
+        self.cost_per_unit = cost_per_unit
+        self.expiry_date = expiry_date
+        self.used_quantity = 0
+
+    def use_drug(self, amount):
+        used = min(amount, self.quantity - self.used_quantity)
+        self.used_quantity += used
+        return used
+
+    def wasted_quantity(self, current_date):
+        if current_date > self.expiry_date:
+            return self.quantity - self.used_quantity
+        return 0
+
+    def wasted_cost(self, current_date):
+        return self.wasted_quantity(current_date) * self.cost_per_unit
+
+# -------------------- SIMULATION --------------------
+def main():
+    current_date = datetime.today()
+
+    # Sample drugs inventory
+    drugs = [
+        Drug("Paracetamol", quantity=500, cost_per_unit=0.5, expiry_date=current_date + timedelta(days=30)),
+        Drug("Amoxicillin", quantity=300, cost_per_unit=1.2, expiry_date=current_date + timedelta(days=10)),
+        Drug("Ibuprofen", quantity=200, cost_per_unit=0.8, expiry_date=current_date + timedelta(days=5)),
+        Drug("Vitamin C", quantity=400, cost_per_unit=0.3, expiry_date=current_date + timedelta(days=60)),
+    ]
+
+    # Simulate random usage
+    for drug in drugs:
+        daily_usage = random.randint(50, 150)
+        drug.use_drug(daily_usage)
+
+    # Calculate wastage
+    wastage_data = []
+    total_wasted_qty = 0
+    total_wasted_cost = 0
+    for drug in drugs:
+        wasted_qty = drug.wasted_quantity(current_date + timedelta(days=15))  # Check after 15 days
+        wasted_cost = drug.wasted_cost(current_date + timedelta(days=15))
+        total_wasted_qty += wasted_qty
+        total_wasted_cost += wasted_cost
+        wastage_data.append({
+            "Drug": drug.name,
+            "Quantity Received": drug.quantity,
+            "Used Quantity": drug.used_quantity,
+            "Wasted Quantity": wasted_qty,
+            "Wasted Cost ($)": round(wasted_cost, 2)
+        })
+
+    df = pd.DataFrame(wastage_data)
+    print("💊 Drug Wastage Report (after 15 days):")
+    print(df)
+    print(f"\nTotal Wasted Quantity: {total_wasted_qty}")
+    print(f"Total Wasted Cost: ${round(total_wasted_cost, 2)}")
+
+    # Suggestions to reduce wastage
+    print("\n💡 Suggestions to Reduce Drug Wastage:")
+    print("- Optimize drug ordering based on usage trends.")
+    print("- Implement First-Expiring-First-Out (FEFO) policy.")
+    print("- Monitor stock regularly and redistribute before expiry.")
+    print("- Educate staff to avoid over-prescription and unnecessary wastage.")
+
+if __name__ == "__main__":
+    main()
