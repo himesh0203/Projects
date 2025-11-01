@@ -1,0 +1,140 @@
+pip install streamlit pandas matplotlib
+
+streamlit run city_pollution_dashboard.py
+
+import streamlit as st
+import random
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# -------------------- POLLUTION SOURCE CLASS --------------------
+class PollutionSource:
+    def __init__(self, source_type, emission_rate):
+        self.source_type = source_type
+        self.emission_rate = emission_rate
+
+    def daily_pollution(self):
+        fluctuation = random.uniform(0.8, 1.2)
+        return self.emission_rate * fluctuation
+
+# -------------------- CITY ZONE CLASS --------------------
+class CityZone:
+    def __init__(self, name):
+        self.name = name
+        self.pollution_level = 0
+        self.sources = []
+
+    def add_source(self, source: PollutionSource):
+        self.sources.append(source)
+
+    def simulate_day(self):
+        self.pollution_level = sum(source.daily_pollution() for source in self.sources)
+
+    def pollution_status(self):
+        if self.pollution_level < 50:
+            return "Safe"
+        elif 50 <= self.pollution_level < 100:
+            return "Moderate"
+        else:
+            return "High Pollution"
+
+# -------------------- CITY POLLUTION SYSTEM --------------------
+class CityPollutionSystem:
+    def __init__(self):
+        self.zones = []
+
+    def add_zone(self, zone: CityZone):
+        self.zones.append(zone)
+
+    def simulate_day(self):
+        for zone in self.zones:
+            zone.simulate_day()
+
+    def generate_dataframe(self):
+        data = []
+        for zone in self.zones:
+            data.append({
+                "Zone": zone.name,
+                "Pollution Level": round(zone.pollution_level, 2),
+                "Status": zone.pollution_status(),
+                "Sources": len(zone.sources)
+            })
+        return pd.DataFrame(data)
+
+    def high_pollution_zones(self):
+        return [zone.name for zone in self.zones if zone.pollution_level >= 100]
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="🌆 City Pollution Dashboard", layout="wide")
+st.title("🌆 City Pollution Simulation Dashboard")
+st.markdown("Simulate city pollution levels and identify unsolved problems affecting daily life.")
+
+# Sidebar Controls
+st.sidebar.header("Simulation Settings")
+num_zones = st.sidebar.slider("Number of Zones", 3, 10, 5)
+num_sources_per_zone = st.sidebar.slider("Max Pollution Sources per Zone", 2, 8, 5)
+
+# Initialize city
+city = CityPollutionSystem()
+zone_names = ["Downtown", "Industrial Area", "Residential Area", "Suburbs", "City Park", 
+              "Market Area", "Harbor", "Airport", "University", "Hospital Area"]
+
+for i in range(num_zones):
+    zone = CityZone(zone_names[i])
+    for _ in range(random.randint(2, num_sources_per_zone)):
+        source_type = random.choice(["Vehicle", "Factory", "Waste"])
+        emission_rate = random.randint(10, 50)
+        zone.add_source(PollutionSource(source_type, emission_rate))
+    city.add_zone(zone)
+
+# Simulate daily pollution
+city.simulate_day()
+
+# Display data
+df = city.generate_dataframe()
+st.subheader("📊 Zone Pollution Report")
+st.dataframe(df)
+
+# Highlight high-pollution zones
+high_polluted = city.high_pollution_zones()
+if high_polluted:
+    st.subheader("⚠️ High Pollution Zones (Unsolved Problems)")
+    st.warning(", ".join(high_polluted))
+else:
+    st.success("✅ All zones are under safe pollution levels today.")
+
+# Visualizations
+st.subheader("📈 Pollution Levels by Zone")
+fig, ax = plt.subplots(figsize=(8,4))
+colors = ['green' if lvl < 50 else 'orange' if lvl < 100 else 'red' for lvl in df['Pollution Level']]
+ax.bar(df['Zone'], df['Pollution Level'], color=colors)
+ax.axhline(50, color='yellow', linestyle='--', label='Safe Threshold')
+ax.axhline(100, color='red', linestyle='--', label='High Pollution Threshold')
+ax.set_ylabel("Pollution Level")
+ax.set_xlabel("Zone")
+ax.set_title("City Pollution Levels")
+ax.legend()
+plt.xticks(rotation=45)
+st.pyplot(fig)
+
+# Pollution Source Breakdown
+st.subheader("🔥 Pollution Source Types Distribution")
+source_counts = {"Vehicle":0, "Factory":0, "Waste":0}
+for zone in city.zones:
+    for s in zone.sources:
+        source_counts[s.source_type] += 1
+
+fig2, ax2 = plt.subplots(figsize=(6,4))
+ax2.pie(source_counts.values(), labels=source_counts.keys(), autopct='%1.1f%%', colors=['skyblue','orange','grey'])
+ax2.set_title("Pollution Source Types")
+st.pyplot(fig2)
+
+# Suggestions
+st.subheader("💡 Suggestions to Reduce City Pollution")
+st.info("""
+- Promote **public transport, cycling, and walking** to reduce vehicle emissions.  
+- Enforce stricter **factory emission regulations**.  
+- Improve **waste management** and reduce open burning.  
+- Plant **trees and maintain green areas** in every zone.  
+- Monitor real-time pollution levels and deploy **mobile mitigation measures**.
+""")
