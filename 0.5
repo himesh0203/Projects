@@ -1,0 +1,54 @@
+pip install streamlit
+
+streamlit run app.py
+
+
+import streamlit as st
+import pandas as pd
+
+# Initialize session state for storing ratings
+if "ratings" not in st.session_state:
+    st.session_state.ratings = pd.DataFrame(columns=["Food", "Road", "Education", "Water", "Electricity"])
+
+st.title("Community Service Ratings App")
+
+st.header("Submit Your Ratings (1-5)")
+
+with st.form(key="rating_form"):
+    food = st.number_input("Food Quality", min_value=1, max_value=5, step=1)
+    road = st.number_input("Road Quality", min_value=1, max_value=5, step=1)
+    education = st.number_input("Education Quality", min_value=1, max_value=5, step=1)
+    water = st.number_input("Water Quality", min_value=1, max_value=5, step=1)
+    electricity = st.number_input("Electricity Availability", min_value=1, max_value=5, step=1)
+    submit = st.form_submit_button("Submit Ratings")
+
+if submit:
+    # Add ratings to dataframe
+    st.session_state.ratings = pd.concat([
+        st.session_state.ratings,
+        pd.DataFrame([{
+            "Food": food,
+            "Road": road,
+            "Education": education,
+            "Water": water,
+            "Electricity": electricity
+        }])
+    ], ignore_index=True)
+    st.success("Ratings submitted successfully!")
+
+st.header("All Submitted Ratings")
+st.dataframe(st.session_state.ratings)
+
+if not st.session_state.ratings.empty:
+    st.header("Average Ratings")
+    averages = st.session_state.ratings.mean()
+    st.write(averages.round(2))
+
+    # Option to download CSV
+    csv = st.session_state.ratings.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="Download Ratings as CSV",
+        data=csv,
+        file_name="community_ratings.csv",
+        mime="text/csv"
+    )
