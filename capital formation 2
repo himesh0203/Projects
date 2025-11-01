@@ -1,0 +1,127 @@
+pip install streamlit pandas matplotlib
+
+streamlit run capital_formation_dashboard.py
+
+
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# -------------------- INDIVIDUAL CLASS --------------------
+class Individual:
+    def __init__(self, name, income, savings_rate):
+        self.name = name
+        self.income = income
+        self.savings_rate = savings_rate  # Fraction of income saved
+        self.savings = 0
+
+    def save(self):
+        saved_amount = self.income * self.savings_rate
+        self.savings += saved_amount
+        return saved_amount
+
+    def invest(self, interest_rate):
+        investment_return = self.savings * interest_rate
+        self.savings += investment_return
+        return investment_return
+
+# -------------------- ECONOMY CLASS --------------------
+class Economy:
+    def __init__(self):
+        self.individuals = []
+        self.total_capital = 0
+        self.history = []
+
+    def add_individual(self, individual: Individual):
+        self.individuals.append(individual)
+
+    def simulate_year(self, interest_rate=0.05):
+        yearly_savings = 0
+        yearly_investment_return = 0
+        for person in self.individuals:
+            yearly_savings += person.save()
+            yearly_investment_return += person.invest(interest_rate)
+        self.total_capital += yearly_savings + yearly_investment_return
+        self.history.append({
+            "Total Savings": yearly_savings,
+            "Investment Returns": yearly_investment_return,
+            "Total Capital": self.total_capital
+        })
+        return yearly_savings, yearly_investment_return
+
+    def report(self):
+        data = []
+        for person in self.individuals:
+            data.append({
+                "Individual": person.name,
+                "Income": person.income,
+                "Savings Rate": person.savings_rate,
+                "Total Savings": round(person.savings, 2)
+            })
+        return pd.DataFrame(data)
+
+# -------------------- STREAMLIT DASHBOARD --------------------
+st.set_page_config(page_title="💹 Capital Formation Dashboard", layout="wide")
+st.title("💹 Capital Formation Simulation Dashboard")
+st.markdown("Simulate individual savings and investments to observe capital formation over time.")
+
+# Sidebar Settings
+st.sidebar.header("Simulation Settings")
+years = st.sidebar.slider("Number of Years", 1, 20, 5)
+interest_rate = st.sidebar.slider("Annual Investment Return (%)", 1, 20, 5) / 100
+
+# Define Individuals
+st.sidebar.header("Individuals")
+num_individuals = st.sidebar.slider("Number of Individuals", 1, 10, 4)
+individuals = []
+for i in range(num_individuals):
+    name = st.sidebar.text_input(f"Name of Individual {i+1}", f"Person{i+1}")
+    income = st.sidebar.number_input(f"Income of {name}", min_value=1000, max_value=100000, value=50000)
+    savings_rate = st.sidebar.slider(f"Savings Rate of {name} (%)", 0, 100, 20) / 100
+    individuals.append(Individual(name, income, savings_rate))
+
+# Initialize Economy
+economy = Economy()
+for person in individuals:
+    economy.add_individual(person)
+
+# Simulate over Years
+total_savings_list, investment_list, total_capital_list = [], [], []
+
+for year in range(years):
+    savings, investment = economy.simulate_year(interest_rate)
+    total_savings_list.append(savings)
+    investment_list.append(investment)
+    total_capital_list.append(economy.total_capital)
+
+# Display Yearly Summary
+st.subheader("📊 Yearly Capital Formation Summary")
+yearly_df = pd.DataFrame({
+    "Year": range(1, years+1),
+    "Total Savings": total_savings_list,
+    "Investment Returns": investment_list,
+    "Total Capital": total_capital_list
+})
+st.dataframe(yearly_df)
+
+# Plot Total Capital Over Time
+st.subheader("📈 Total Capital Over Time")
+fig, ax = plt.subplots(figsize=(8,4))
+ax.plot(yearly_df["Year"], yearly_df["Total Capital"], marker='o', color='green')
+ax.set_xlabel("Year")
+ax.set_ylabel("Total Capital")
+ax.set_title("Capital Formation Over Time")
+st.pyplot(fig)
+
+# Individual Savings Report
+st.subheader("👤 Individual Savings Report")
+st.dataframe(economy.report())
+
+# Suggestions
+st.subheader("💡 Suggestions to Increase Capital Formation")
+st.info("""
+- Increase **savings rate** for individuals.  
+- Invest in assets with higher **return rates**.  
+- Encourage **long-term investments** to benefit from compound interest.  
+- Diversify investment portfolio to reduce risks.  
+""")
