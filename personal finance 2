@@ -1,0 +1,99 @@
+pip install streamlit pandas matplotlib
+
+streamlit run personal_finance_dashboard.py
+
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+# -------------------- SETUP --------------------
+st.set_page_config(page_title="💸 Personal Finance Tracker", layout="wide")
+st.title("💸 Personal Finance Dashboard")
+st.markdown("Track your income, expenses, and visualize your financial health.")
+
+# Initialize session state
+if "income" not in st.session_state:
+    st.session_state.income = pd.DataFrame(columns=["Date", "Amount", "Source"])
+if "expenses" not in st.session_state:
+    st.session_state.expenses = pd.DataFrame(columns=["Date", "Amount", "Category"])
+
+# -------------------- ADD INCOME --------------------
+st.subheader("💵 Add Income")
+with st.form("income_form"):
+    income_amount = st.number_input("Amount ($)", min_value=0.0, step=1.0)
+    income_source = st.text_input("Source (e.g., Salary, Freelance)")
+    submitted_income = st.form_submit_button("Add Income")
+    if submitted_income:
+        new_income = pd.DataFrame([{
+            "Date": datetime.now(),
+            "Amount": income_amount,
+            "Source": income_source
+        }])
+        st.session_state.income = pd.concat([st.session_state.income, new_income], ignore_index=True)
+        st.success(f"Income of ${income_amount:.2f} added!")
+
+# -------------------- ADD EXPENSE --------------------
+st.subheader("💸 Add Expense")
+with st.form("expense_form"):
+    expense_amount = st.number_input("Amount ($)", min_value=0.0, step=1.0, key="exp_amount")
+    expense_category = st.text_input("Category (e.g., Food, Rent, Utilities)", key="exp_cat")
+    submitted_expense = st.form_submit_button("Add Expense")
+    if submitted_expense:
+        new_expense = pd.DataFrame([{
+            "Date": datetime.now(),
+            "Amount": expense_amount,
+            "Category": expense_category
+        }])
+        st.session_state.expenses = pd.concat([st.session_state.expenses, new_expense], ignore_index=True)
+        st.success(f"Expense of ${expense_amount:.2f} added!")
+
+# -------------------- FINANCIAL SUMMARY --------------------
+st.subheader("📊 Financial Summary")
+
+total_income = st.session_state.income["Amount"].sum()
+total_expense = st.session_state.expenses["Amount"].sum()
+savings = total_income - total_expense
+
+st.metric("Total Income", f"${total_income:.2f}")
+st.metric("Total Expenses", f"${total_expense:.2f}")
+st.metric("Total Savings", f"${savings:.2f}")
+
+# -------------------- VISUALIZATION --------------------
+st.subheader("📈 Income vs Expenses")
+
+fig, ax = plt.subplots(figsize=(8,4))
+ax.bar("Income", total_income, color="green")
+ax.bar("Expenses", total_expense, color="red")
+ax.set_ylabel("Amount ($)")
+ax.set_title("Income vs Expenses")
+st.pyplot(fig)
+
+st.subheader("💳 Expenses by Category")
+if not st.session_state.expenses.empty:
+    category_totals = st.session_state.expenses.groupby("Category")["Amount"].sum()
+    fig2, ax2 = plt.subplots(figsize=(8,4))
+    category_totals.plot(kind="bar", ax=ax2, color="orange")
+    ax2.set_ylabel("Amount ($)")
+    ax2.set_title("Expenses by Category")
+    st.pyplot(fig2)
+else:
+    st.info("No expenses recorded yet.")
+
+# -------------------- TRANSACTION TABLES --------------------
+st.subheader("📄 Transaction Records")
+
+st.markdown("**Income Records**")
+st.dataframe(st.session_state.income.sort_values(by="Date", ascending=False))
+
+st.markdown("**Expense Records**")
+st.dataframe(st.session_state.expenses.sort_values(by="Date", ascending=False))
+
+# -------------------- TIPS --------------------
+st.subheader("💡 Financial Tips")
+st.info("""
+- Track every income and expense for better budgeting.  
+- Categorize your spending to identify areas to save.  
+- Aim to save at least 20% of your income each month.  
+- Review your financial summary weekly to stay on top of your finances.
+""")
