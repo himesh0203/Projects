@@ -1,0 +1,61 @@
+# This is a conceptual outline; full implementation requires more data and training.
+import nltk
+from nltk.stem import WordNetLemmatizer
+import json
+import random
+
+# Load intents from a JSON file (e.g., intents.json)
+# intents.json would contain patterns and responses for different categories (intents)
+# Example structure:
+# {
+#   "intents": [
+#     {"tag": "greeting", "patterns": ["hi", "hello", "hey"], "responses": ["Hello!", "Hi there!"]},
+#     {"tag": "courses", "patterns": ["what courses", "programs offered"], "responses": ["We offer CS, Engineering, Business..."]},
+#     # ... more intents
+#   ]
+# }
+
+lemmatizer = WordNetLemmatizer()
+
+def clean_up_sentence(sentence):
+    sentence_words = nltk.word_tokenize(sentence)
+    sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
+    return sentence_words
+
+def bag_of_words(sentence, words):
+    sentence_words = clean_up_sentence(sentence)
+    bag = [0] * len(words)
+    for s in sentence_words:
+        for i, w in enumerate(words):
+            if w == s:
+                bag[i] = 1
+    return bag
+
+# (Training a model like a Neural Network or SVM would go here)
+# This would involve preparing training data from your intents.json,
+# training a model to predict the intent based on the bag-of-words or other features.
+
+def get_response(user_input, intents_json, model, words):
+    # This function would use the trained model to predict the intent
+    # and then retrieve a random response from the corresponding intent in intents_json.
+    # For a simple example, we'll simulate intent matching without a trained model.
+
+    user_input_lower = user_input.lower()
+    for intent in intents_json['intents']:
+        for pattern in intent['patterns']:
+            if pattern in user_input_lower:
+                return random.choice(intent['responses'])
+    return "I'm not sure how to respond to that. Could you please rephrase?"
+
+# Example usage (without actual model training)
+# Assuming you have an 'intents.json' file with your college-related intents
+# with open('intents.json') as file:
+#     intents_data = json.load(file)
+
+# print("College Enquiry Chatbot: Ask me anything about the college! (Type 'exit' to quit)")
+# while True:
+#     user_query = input("You: ")
+#     if user_query.lower() == 'exit':
+#         break
+#     response = get_response(user_query, intents_data, None, None) # model and words would be from training
+#     print(f"College Enquiry Chatbot: {response}")
