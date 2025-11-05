@@ -1,0 +1,87 @@
+To use this code:
+Hardware: Connect an Arduino board, an HC-05 Bluetooth module, and relay modules connected to your appliances.
+Wiring: Connect the HC-05 TX to Arduino pin 2 and HC-05 RX to Arduino pin 3. Connect the relay module input pins to the specified Arduino pins (e.g., pin 6 for Light1).
+Smartphone App: Use a voice control app (e.g., "Bluetooth Voice Controller" or similar) on your smartphone to send voice commands via Bluetooth to the HC-05 module. Ensure the app sends commands in the format expected by the Arduino code (e.g., "*turn on light#").
+Upload: Upload this code to your Arduino board.
+
+
+
+
+
+
+
+#include <SoftwareSerial.h> // Include the SoftwareSerial library for communication with HC-05
+
+// Define relay pins (adjust based on your wiring)
+const int Light1 = 6; // Relay pin for the first light
+const int Fan = 5;    // Relay pin for the fan
+const int TV = 4;     // Relay pin for the TV
+
+// Create SoftwareSerial object for Bluetooth module (Rx, Tx)
+SoftwareSerial bt(2, 3); // Connect HC-05 TX to Arduino pin 2, HC-05 RX to Arduino pin 3
+
+String voiceCommand; // Variable to store received voice commands
+
+void setup() {
+  bt.begin(9600);       // Initialize SoftwareSerial communication with Bluetooth module
+  Serial.begin(9600);   // Initialize hardware serial communication for debugging
+
+  // Set relay pins as OUTPUT
+  pinMode(Light1, OUTPUT);
+  pinMode(Fan, OUTPUT);
+  pinMode(TV, OUTPUT);
+
+  // Initially turn off all connected devices (HIGH for active-LOW relays)
+  digitalWrite(Light1, HIGH);
+  digitalWrite(Fan, HIGH);
+  digitalWrite(TV, HIGH);
+
+  Serial.println("Voice Controlled Home Automation Ready!");
+}
+
+void loop() {
+  // Check if data is available from the Bluetooth module
+  while (bt.available()) {
+    char receivedChar = bt.read(); // Read the incoming character
+    if (receivedChar == '#') {     // Assuming '#' marks the end of a command
+      break; // Exit the loop if end-of-command character is received
+    }
+    voiceCommand += receivedChar; // Append the character to the voiceCommand string
+  }
+
+  // Process the received voice command
+  if (voiceCommand.length() > 0) {
+    Serial.print("Received: ");
+    Serial.println(voiceCommand); // Print the received command to the serial monitor
+
+    // Control devices based on voice commands (case-insensitive comparison)
+    if (voiceCommand.equalsIgnoreCase("*turn on light")) {
+      digitalWrite(Light1, LOW); // Turn on Light1 (assuming active-LOW relay)
+      Serial.println("Light 1 ON");
+    } else if (voiceCommand.equalsIgnoreCase("*turn off light")) {
+      digitalWrite(Light1, HIGH); // Turn off Light1
+      Serial.println("Light 1 OFF");
+    } else if (voiceCommand.equalsIgnoreCase("*turn on fan")) {
+      digitalWrite(Fan, LOW); // Turn on Fan
+      Serial.println("Fan ON");
+    } else if (voiceCommand.equalsIgnoreCase("*turn off fan")) {
+      digitalWrite(Fan, HIGH); // Turn off Fan
+    } else if (voiceCommand.equalsIgnoreCase("*turn on tv")) {
+      digitalWrite(TV, LOW); // Turn on TV
+      Serial.println("TV ON");
+    } else if (voiceCommand.equalsIgnoreCase("*turn off tv")) {
+      digitalWrite(TV, HIGH); // Turn off TV
+    } else if (voiceCommand.equalsIgnoreCase("*turn on all")) {
+      digitalWrite(Light1, LOW);
+      digitalWrite(Fan, LOW);
+      digitalWrite(TV, LOW);
+      Serial.println("All ON");
+    } else if (voiceCommand.equalsIgnoreCase("*turn off all")) {
+      digitalWrite(Light1, HIGH);
+      digitalWrite(Fan, HIGH);
+      digitalWrite(TV, HIGH);
+      Serial.println("All OFF");
+    }
+    voiceCommand = ""; // Clear the command string for the next input
+  }
+}
