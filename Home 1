@@ -1,0 +1,66 @@
+import speech_recognition as sr
+
+def recognize_speech():
+    """
+    Listens for audio input from the microphone and attempts to convert it to text.
+    """
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Say something!")
+        try:
+            # Adjust for ambient noise for better recognition
+            r.adjust_for_ambient_noise(source, duration=1)
+            audio = r.listen(source)
+            print("Recognizing...")
+            text = r.recognize_google(audio)
+            return text
+        except sr.UnknownValueError:
+            return "Could not understand audio"
+        except sr.RequestError as e:
+            return f"Could not request results from Google Speech Recognition service; {e}"
+
+if __name__ == "__main__":
+    print("Welcome to the Voice Command Demo!")
+    command = recognize_speech()
+    print(f"You said: {command}")
+
+    # In a real home automation system, you would parse 'command'
+    # and trigger actions based on keywords (e.g., "turn on lights", "set thermostat to 22")
+    if "lights on" in command.lower():
+        print("Simulating: Turning on the lights.")
+    elif "lights off" in command.lower():
+        print("Simulating: Turning off the lights.")
+    elif "hello" in command.lower():
+        print("Simulating: Hello to you too!")
+    else:
+        print("Simulating: Command not recognized for home automation.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pip install SpeechRecognition PyAudio
+
+    python voice_control.py
+
+Explanation for Online Compiler Compatibility:
+speech_recognition library: Most online Python compilers do not pre-install this library or provide access to a microphone. You would need an environment where you can install SpeechRecognition (e.g., pip install SpeechRecognition) and have a working microphone.
+sr.Microphone(): This component directly interacts with your computer's microphone, which is not accessible from an online compiler's sandboxed environment.
+To run this code and actually use your voice on your local machine:
+Install the library: Open your terminal or command prompt and run:
+
+PyAudio is often needed for SpeechRecognition to work with microphones.)
+Run the script: Save the code as a .py file (e.g., voice_control.py) and run it from your terminal:
+Code
+
+
+
