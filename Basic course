@@ -1,0 +1,25 @@
+def simple_chatbot():
+    """Implements a basic rule-based chatbot for a Python course."""
+
+    print("Chatbot: Hello! I'm here to answer your questions about the Python course.")
+    print("Chatbot: You can ask me about 'syllabus', 'assignments', 'exams', or 'contact'. Type 'quit' to exit.")
+
+    while True:
+        user_input = input("You: ").lower()
+
+        if user_input == 'quit':
+            print("Chatbot: Goodbye! Good luck with your studies.")
+            break
+        elif 'syllabus' in user_input:
+            print("Chatbot: The Python course syllabus covers topics like variables, data types, control flow, functions, and object-oriented programming.")
+        elif 'assignments' in user_input:
+            print("Chatbot: There are weekly programming assignments and a final project. Deadlines are posted on the course website.")
+        elif 'exams' in user_input:
+            print("Chatbot: There will be a midterm exam and a final exam. Both are comprehensive and will test your understanding of the course material.")
+        elif 'contact' in user_input or 'instructor' in user_input:
+            print("Chatbot: You can reach the instructor via email at instructor@example.com or during office hours on Tuesdays and Thursdays from 2-4 PM.")
+        else:
+            print("Chatbot: Sorry, I don't understand that question. Please try asking about 'syllabus', 'assignments', 'exams', or 'contact'.")
+
+if __name__ == "__main__":
+    simple_chatbot()
