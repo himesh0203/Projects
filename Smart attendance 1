@@ -1,0 +1,182 @@
+the core logic using face_recognition and OpenCV.
+
+
+Prerequisites:
+Install the necessary libraries:
+pip install opencv-python face-recognition numpy pandas
+
+import cv2
+import numpy as np
+import face_recognition
+import os
+from datetime import datetime
+import pandas as pd
+
+# --- Configuration ---
+KNOWN_FACES_DIR = "known_faces"
+ATTENDANCE_LOG_FILE = "attendance_log.csv"
+
+# --- Helper Functions ---
+
+def load_known_faces(known_faces_dir):
+    """Loads known faces and their encodings from a directory."""
+    known_face_encodings = []
+    known_face_names = []
+
+    if not os.path.exists(known_faces_dir):
+        os.makedirs(known_faces_dir)
+
+    for name in os.listdir(known_faces_dir):
+        person_dir = os.path.join(known_faces_dir, name)
+        if os.path.isdir(person_dir):
+            for filename in os.listdir(person_dir):
+                if filename.endswith((".jpg", ".png")):
+                    image_path = os.path.join(person_dir, filename)
+                    image = face_recognition.load_image_file(image_path)
+                    encodings = face_recognition.face_encodings(image)
+                    if encodings:
+                        known_face_encodings.append(encodings[0])
+                        known_face_names.append(name)
+    return known_face_encodings, known_face_names
+
+def mark_attendance(name):
+    """Marks attendance in the log file."""
+    if not os.path.exists(ATTENDANCE_LOG_FILE):
+        df = pd.DataFrame(columns=["Name", "Timestamp"])
+        df.to_csv(ATTENDANCE_LOG_FILE, index=False)
+
+    df = pd.read_csv(ATTENDANCE_LOG_FILE)
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Check if the person has already been marked today
+    today_records = df[pd.to_datetime(df['Timestamp']).dt.date == now.date()]
+    if name not in today_records['Name'].values:
+        new_entry = pd.DataFrame([{"Name": name, "Timestamp": dt_string}])
+        df = pd.concat([df, new_entry], ignore_index=True)
+        df.to_csv(ATTENDANCE_LOG_FILE, index=False)
+        print(f"Attendance marked for {name} at {dt_string}")
+    else:
+        print(f"{name} already marked attendance today.")
+
+def capture_new_face(name, known_faces_dir):
+    """Captures images for a new person and saves them."""
+    person_dir = os.path.join(known_faces_dir, name)
+    if not os.path.exists(person_dir):
+        os.makedirs(person_dir)
+
+    cap = cv2.VideoCapture(0)
+    count = 0
+    print(f"Capturing faces for {name}. Look at the camera. Press 'q' to stop.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        face_locations = face_recognition.face_locations(frame)
+
+        for (top, right, bottom, left) in face_locations:
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            face_image = frame[top:bottom, left:right]
+            filename = os.path.join(person_dir, f"{name}_{count}.jpg")
+            cv2.imwrite(filename, face_image)
+            count += 1
+            print(f"Captured image {count} for {name}")
+
+        cv2.imshow("Capture New Face", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q') or count >= 10: # Capture 10 images
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print(f"Finished capturing faces for {name}.")
+
+# --- Main Attendance System ---
+
+def run_attendance_system():
+    """Runs the main attendance system."""
+    known_face_encodings, known_face_names = load_known_faces(KNOWN_FACES_DIR)
+
+    if not known_face_encodings:
+        print("No known faces found. Please add faces using the 'add_face' command.")
+        return
+
+    video_capture = cv2.VideoCapture(0)
+
+    face_locations = []
+    face_encodings = []
+    face_names = []
+    process_this_frame = True
+
+    print("Attendance system running. Press 'q' to quit.")
+
+    while True:
+        ret, frame = video_capture.read()
+        if not ret:
+            break
+
+        # Resize frame for faster processing
+        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
+        if process_this_frame:
+            face_locations = face_recognition.face_locations(rgb_small_frame)
+            face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+
+            face_names = []
+            for face_encoding in face_encodings:
+                matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+                name = "Unknown"
+
+                face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+                best_match_index = np.argmin(face_distances)
+                if matches[best_match_index]:
+                    name = known_face_names[best_match_index]
+                    mark_attendance(name)
+
+                face_names.append(name)
+
+        process_this_frame = not process_this_frame
+
+        # Display results
+        for (top, right, bottom, left), name in zip(face_locations, face_names):
+            top *= 4
+            right *= 4
+            bottom *= 4
+            left *= 4
+
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+            cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
+            font = cv2.FONT_HERSHEY_DUPLEX
+            cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+
+        cv2.imshow("Smart Attendance System", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    video_capture.release()
+    cv2.destroyAllWindows()
+
+# --- Main Execution ---
+if __name__ == "__main__":
+    while True:
+        print("\n--- Smart Attendance System Menu ---")
+        print("1. Add New Face")
+        print("2. Run Attendance System")
+        print("3. Exit")
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            name = input("Enter the name of the person: ")
+            capture_new_face(name, KNOWN_FACES_DIR)
+        elif choice == '2':
+            run_attendance_system()
+        elif choice == '3':
+            print("Exiting system.")
+            break
+        else:
+            print("Invalid choice. Please try again.")
