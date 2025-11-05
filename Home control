@@ -1,0 +1,76 @@
+import speech_recognition as sr
+
+def take_command():
+    """
+    Listens for a voice command, recognizes it using Google Speech Recognition,
+    and returns the transcribed text.
+    """
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Listening for command...")
+        r.pause_threshold = 1 # seconds of non-speaking audio before a phrase is considered complete
+        audio = r.listen(source)
+
+    try:
+        print("Recognizing...")
+        query = r.recognize_google(audio, language='en-in')
+        print(f"User said: {query}\n")
+        return query.lower()
+    except sr.UnknownValueError:
+        print("Sorry, I could not understand your audio.")
+        return "None"
+    except sr.RequestError as e:
+        print(f"Could not request results from Google Speech Recognition service; {e}")
+        return "None"
+
+def control_appliance(command):
+    """
+    Simulates controlling a home appliance based on the recognized command.
+    """
+    if "turn on light" in command:
+        print("Simulating: Turning on the living room light.")
+    elif "turn off light" in command:
+        print("Simulating: Turning off the living room light.")
+    elif "turn on fan" in command:
+        print("Simulating: Turning on the bedroom fan.")
+    elif "turn off fan" in command:
+        print("Simulating: Turning off the bedroom fan.")
+    elif "exit" in command or "stop" in command:
+        print("Exiting home automation system.")
+        return False
+    else:
+        print("Command not recognized. Please try again.")
+    return True
+
+if __name__ == "__main__":
+    print("Voice Controlled Home Automation System (Simulation)")
+    running = True
+    while running:
+        command = take_command()
+        if command != "None":
+            running = control_appliance(command)
+
+
+
+
+# ... (imports and control_appliance function remain the same) ...
+
+def take_command_simulated():
+    """
+    Simulates a voice command by returning a predefined string.
+    """
+    # In a real online compiler, you would replace this with a test string
+    # or a way to manually input text.
+    simulated_commands = ["turn on light", "turn off fan", "exit"]
+    import random
+    query = random.choice(simulated_commands)
+    print(f"Simulated user said: {query}\n")
+    return query.lower()
+
+if __name__ == "__main__":
+    print("Voice Controlled Home Automation System (Simulated Input)")
+    running = True
+    while running:
+        command = take_command_simulated() # Use the simulated function
+        if command != "None":
+            running = control_appliance(command)
