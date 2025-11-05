@@ -1,0 +1,119 @@
+import os
+from dotenv import load_dotenv
+from typing import List
+from pydantic import BaseModel, Field
+
+# Load environment variables (e.g., OPENAI_API_KEY)
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+
+# --- 1. Data Models (Pydantic for structured data) ---
+class UserProfile(BaseModel):
+    user_id: str
+    dietary_preferences: List[str] # e.g., ['vegetarian', 'low-carb']
+    travel_patterns: str          # e.g., 'daily car commute', 'work from home'
+    home_energy_usage: float     # e.g., kWh per month
+    sustainability_goals: str    # e.g., 'reduce carbon footprint by 20%'
+
+class Recommendation(BaseModel):
+    category: str                # e.g., 'Diet', 'Travel', 'Energy'
+    tip: str
+    estimated_impact: str        # e.g., 'High', 'Medium', 'Low'
+    personalized_reasoning: str
+
+# --- 2. Tools (Mock functions simulating real-world integrations) ---
+class Tools:
+    @staticmethod
+    def get_real_time_weather(city: str) -> str:
+        """Fetches real-time weather information for a city."""
+        # In a real system, this would call a weather API
+        return f"The weather in {city} is sunny and 25°C."
+
+    @staticmethod
+    def calculate_carbon_footprint(profile: UserProfile) -> float:
+        """Calculates the user's current estimated carbon footprint."""
+        # This would use a complex model based on actual data
+        return profile.home_energy_usage * 0.5 + (100 if profile.travel_patterns == 'daily car commute' else 10)
+
+    @staticmethod
+    def fetch_sustainable_recipes(diet: List[str]) -> List[str]:
+        """Fetches recipes that match dietary preferences and are sustainable."""
+        # This would interface with a recipe database
+        return ["Lentil soup (low carbon)", "Seasonal vegetable stir-fry"]
+
+# --- 3. Agents (Using LangChain as an example framework for structure) ---
+
+from langchain.agents import initialize_agent, Tool
+from langchain.llms import OpenAI
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
+
+# Initialize the LLM (Large Language Model)
+llm = OpenAI(api_key=api_key, temperature=0.5)
+
+class PersonalizationAgent:
+    def __init__(self):
+        self.tools = [
+            Tool(name="CalculateCarbonFootprint", func=Tools.calculate_carbon_footprint, description="Useful for calculating user's current carbon footprint."),
+            Tool(name="FetchSustainableRecipes", func=Tools.fetch_sustainable_recipes, description="Useful for finding sustainable recipes based on diet."),
+        ]
+        self.agent = initialize_agent(self.tools, llm, agent="zero-shot-react-description", verbose=True)
+        self.prompt = PromptTemplate(
+            input_variables=["user_profile_summary", "goal"],
+            template="Given the user profile: {user_profile_summary}, and their goal: {goal}. Provide personalized and sustainable recommendations."
+        )
+        self.chain = LLMChain(llm=llm, prompt=self.prompt)
+
+    def provide_recommendations(self, profile: UserProfile) -> str:
+        profile_summary = f"Diet: {profile.dietary_preferences}, Travel: {profile.travel_patterns}, Energy: {profile.home_energy_usage} kWh"
+        goal = profile.sustainability_goals
+        # In a full agent system, the agent decides which tools to use to achieve the goal
+        # For this simplified example, we use a chain to generate recommendations based on the prompt
+        response = self.chain.run(user_profile_summary=profile_summary, goal=goal)
+        return response
+
+class MonitoringAgent:
+    def __init__(self):
+        self.tools = [
+            Tool(name="GetRealTimeWeather", func=Tools.get_real_time_weather, description="Useful for getting live weather data."),
+        ]
+        self.agent = initialize_agent(self.tools, llm, agent="zero-shot-react-description", verbose=True)
+
+    def daily_check(self, city: str, current_carbon_footprint: float) -> str:
+        # The agent decides to use the weather tool if needed for context
+        result = self.agent.run(f"Today's weather in {city} is {Tools.get_real_time_weather(city)}. The user's current monthly carbon footprint is {current_carbon_footprint} tons. Provide a brief daily insight or check-in.")
+        return result
+
+# --- 4. Ecosystem Orchestrator (Main script) ---
+if __name__ == "__main__":
+    # 1. Define a sample user profile
+    user_data = UserProfile(
+        user_id="user123",
+        dietary_preferences=["vegetarian"],
+        travel_patterns="daily car commute",
+        home_energy_usage=300.5, # monthly kWh
+        sustainability_goals="reduce carbon footprint by 20%"
+    )
+    
+    # 2. Initialize agents
+    personalization_agent = PersonalizationAgent()
+    monitoring_agent = MonitoringAgent()
+    
+    print("--- Generating Personalized Recommendations ---")
+    recommendations = personalization_agent.provide_recommendations(user_data)
+    print(recommendations)
+    
+    print("\n--- Running Daily Monitoring Check-in ---")
+    current_footprint = Tools.calculate_carbon_footprint(user_data)
+    daily_insight = monitoring_agent.daily_check("Mumbai", current_footprint)
+    print(daily_insight)
+
+
+Prerequisites
+The following are needed:
+An LLM API key (e.g., OpenAI, Gemini, Claude).
+Python libraries such as requests, pydantic, and an agent framework (like langchain or autogen) installed.
+bash
+pip install langchain openai pydantic python-dotenv
+
+Python Code Framework (sustainable_living_ecosystem.py)
