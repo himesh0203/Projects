@@ -1,0 +1,99 @@
+import nltk
+from nltk.stem import WordNetLemmatizer
+import json
+import random
+
+# Download necessary NLTK data (run once)
+# nltk.download('punkt')
+# nltk.download('wordnet')
+
+class CollegeEnquiryChatbot:
+    def __init__(self, intents_file="intents.json"):
+        self.lemmatizer = WordNetLemmatizer()
+        self.intents = self._load_intents(intents_file)
+
+    def _load_intents(self, intents_file):
+        """Loads intents from a JSON file."""
+        with open(intents_file, 'r') as f:
+            return json.load(f)
+
+    def _preprocess_text(self, text):
+        """Tokenizes and lemmatizes the input text."""
+        tokens = nltk.word_tokenize(text.lower())
+        lemmatized_tokens = [self.lemmatizer.lemmatize(token) for token in tokens]
+        return lemmatized_tokens
+
+    def _recognize_intent(self, user_input_tokens):
+        """Recognizes the intent based on keyword matching."""
+        for intent in self.intents['intents']:
+            for pattern in intent['patterns']:
+                pattern_tokens = self._preprocess_text(pattern)
+                # Simple check: if all pattern tokens are in user input tokens
+                if all(token in user_input_tokens for token in pattern_tokens):
+                    return intent['tag']
+        return "fallback" # Default fallback intent if no match
+
+    def _get_response(self, intent_tag):
+        """Retrieves a random response for a given intent."""
+        for intent in self.intents['intents']:
+            if intent['tag'] == intent_tag:
+                return random.choice(intent['responses'])
+        return "I'm sorry, I don't understand that. Can you please rephrase?"
+
+    def chat(self, user_input):
+        """Processes user input and returns a chatbot response."""
+        processed_input = self._preprocess_text(user_input)
+        intent_tag = self._recognize_intent(processed_input)
+        response = self._get_response(intent_tag)
+        return response
+
+# Example intents.json structure
+# Save this content as 'intents.json' in the same directory as your Python script
+"""
+{
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": ["hi", "hello", "hey", "good morning", "good afternoon"],
+      "responses": ["Hello!", "Hi there!", "Hey! How can I help you?"]
+    },
+    {
+      "tag": "admission_info",
+      "patterns": ["how to apply", "admission process", "admission requirements", "eligibility criteria"],
+      "responses": ["You can find detailed admission information on our official website.", "Please visit the admissions section of our college portal for application guidelines."]
+    },
+    {
+      "tag": "course_details",
+      "patterns": ["courses offered", "what courses do you have", "course list", "programs available"],
+      "responses": ["We offer a wide range of undergraduate and postgraduate programs. You can find the full list on our academic page.", "Please specify which department or area of study you are interested in."]
+    },
+    {
+      "tag": "fees_query",
+      "patterns": ["fees structure", "how much does it cost", "tuition fees", "fee details"],
+      "responses": ["The fee structure varies by program. You can find detailed fee information on our website's finance section.", "For specific program fees, please refer to the official college prospectus or website."]
+    },
+    {
+      "tag": "contact_info",
+      "patterns": ["contact number", "email address", "how to contact", "reach out"],
+      "responses": ["You can reach us at [College Phone Number] or email us at [College Email Address].", "Our contact details are available on the 'Contact Us' page of our website."]
+    },
+    {
+      "tag": "fallback",
+      "patterns": [],
+      "responses": ["I'm sorry, I didn't understand that. Could you please rephrase your question?", "I'm still learning! Can you ask me something else related to college enquiries?"]
+    }
+  ]
+}
+"""
+
+if __name__ == "__main__":
+    chatbot = CollegeEnquiryChatbot()
+    print("College Enquiry Chatbot: Hello! How can I help you with your college inquiries? (Type 'quit' to exit)")
+
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() == 'quit':
+            print("College Enquiry Chatbot: Goodbye! Have a great day.")
+            break
+        response = chatbot.chat(user_input)
+        print(f"College Enquiry Chatbot: {response}")
