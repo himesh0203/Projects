@@ -1,0 +1,128 @@
+the face_recognition library, which simplifies the process considerably.
+Prerequisites:
+face_recognition library: This library simplifies face recognition tasks.
+numpy: For numerical operations.
+Pillow (PIL Fork): For image handling.
+Installation (if running locally):
+Code
+
+pip install face_recognition numpy Pillow
+
+
+
+
+
+
+
+import face_recognition
+import numpy as np
+from PIL import Image
+import os
+from datetime import datetime
+
+# --- Configuration ---
+KNOWN_FACES_DIR = "known_faces" # Directory to store images of known individuals
+ATTENDANCE_LOG_FILE = "attendance_log.csv"
+
+# --- Setup Known Faces ---
+def load_known_faces(directory):
+    known_face_encodings = []
+    known_face_names = []
+    for filename in os.listdir(directory):
+        if filename.endswith((".jpg", ".png", ".jpeg")):
+            image_path = os.path.join(directory, filename)
+            try:
+                image = face_recognition.load_image_file(image_path)
+                face_encodings = face_recognition.face_encodings(image)
+                if face_encodings:
+                    known_face_encodings.append(face_encodings[0])
+                    known_face_names.append(os.path.splitext(filename)[0]) # Use filename as name
+                else:
+                    print(f"No face found in {filename}")
+            except Exception as e:
+                print(f"Error loading {filename}: {e}")
+    return known_face_encodings, known_face_names
+
+# --- Attendance Logging ---
+def log_attendance(name):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(ATTENDANCE_LOG_FILE, "a") as f:
+        f.write(f"{name},{timestamp}\n")
+    print(f"Attendance recorded for {name} at {timestamp}")
+
+# --- Main Attendance System Logic ---
+def run_attendance_system(live_image_path):
+    known_face_encodings, known_face_names = load_known_faces(KNOWN_FACES_DIR)
+
+    if not known_face_encodings:
+        print("No known faces found. Please add images to the 'known_faces' directory.")
+        return
+
+    try:
+        live_image = face_recognition.load_image_file(live_image_path)
+    except FileNotFoundError:
+        print(f"Error: Live image not found at {live_image_path}")
+        return
+
+    face_locations = face_recognition.face_locations(live_image)
+    face_encodings = face_recognition.face_encodings(live_image, face_locations)
+
+    recognized_names = []
+    for face_encoding in face_encodings:
+        matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+        name = "Unknown"
+
+        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+        best_match_index = np.argmin(face_distances)
+
+        if matches[best_match_index]:
+            name = known_face_names[best_match_index]
+            if name not in recognized_names: # Prevent duplicate attendance for same person in one frame
+                recognized_names.append(name)
+                log_attendance(name)
+        else:
+            print("Unknown face detected.")
+
+    if not recognized_names and face_encodings:
+        print("No known faces recognized in the live image.")
+    elif not face_encodings:
+        print("No faces detected in the live image.")
+
+# --- Execution ---
+if __name__ == "__main__":
+    # Create the known_faces directory if it doesn't exist
+    os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+
+    # Example: To simulate a live capture, place an image named 'live_capture.jpg'
+    # in the same directory as this script, or provide a full path.
+    # Also, populate the 'known_faces' directory with images of individuals
+    # named after them (e.g., 'John_Doe.jpg').
+    
+    # Example usage with a dummy live image (replace with your actual image path)
+    dummy_live_image_path = "live_capture.jpg" 
+    
+    # Create a dummy live_capture.jpg for testing if it doesn't exist
+    if not os.path.exists(dummy_live_image_path):
+        try:
+            # Create a blank image for demonstration
+            dummy_image = Image.new('RGB', (60, 30), color = 'red')
+            dummy_image.save(dummy_live_image_path)
+            print(f"Created a dummy image: {dummy_live_image_path}. Replace it with a real image for testing.")
+        except Exception as e:
+            print(f"Could not create dummy image: {e}")
+
+    print("Running attendance system...")
+    run_attendance_system(dummy_live_image_path)
+
+
+To run this code in an online Python compiler:
+Create known_faces directory: Most online compilers allow creating folders. Create a folder named known_faces.
+Upload known face images: Upload images of individuals you want to recognize into the known_faces directory. Name the images clearly (e.g., Alice.jpg, Bob.png).
+Upload a "live" image: Upload an image that simulates the live feed (e.g., live_capture.jpg) to the same directory as your Python script. This image should contain faces you want to recognize for attendance.
+Paste the code: Paste the provided Python code into the online compiler.
+Run the code.
+Important Notes for Online Compilers:
+File System Access: Online compilers vary in their file system capabilities. Ensure the one you use allows creating directories and uploading files.
+Camera Access: True "live" camera feed integration is typically not possible in online compilers due to security and hardware limitations. The provided solution simulates this by processing a pre-uploaded image.
+Performance: Face recognition can be computationally intensive. Performance in an online environment might be limited by the compiler's resources.
+Error Handling: The provided code includes basic error handling, but robust error handling for production systems would be more extensive.
