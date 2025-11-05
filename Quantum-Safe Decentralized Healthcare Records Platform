@@ -1,0 +1,156 @@
+import hashlib
+import json
+from time import time
+from oqs import Signature, KeyEncapsulation # Requires: pip install liboqs-python
+
+# --- 1. Quantum-Safe Cryptography Helper Functions ---
+
+def generate_quantum_safe_keys(sig_algo='Dilithium2', kem_algo='Kyber512'):
+    """Generates a quantum-safe signature and key encapsulation key pair."""
+    sig = Signature(sig_algo)
+    kem = KeyEncapsulation(kem_algo)
+    
+    # Signature keys (for authentication/signing transactions)
+    sig_public_key = sig.generate_keypair()
+    sig_private_key = sig.export_secret_key()
+
+    # KEM keys (for secure key exchange for data encryption)
+    kem_public_key = kem.generate_keypair()
+    kem_private_key = kem.export_secret_key()
+    
+    return {
+        'sig_pk': sig_public_key, 'sig_sk': sig_private_key,
+        'kem_pk': kem_public_key, 'kem_sk': kem_private_key
+    }
+
+def sign_data_quantum_safe(private_key, data, sig_algo='Dilithium2'):
+    """Signs data using a quantum-resistant signature algorithm."""
+    sig = Signature(sig_algo)
+    return sig.sign(json.dumps(data).encode(), private_key)
+
+def verify_signature_quantum_safe(public_key, data, signature, sig_algo='Dilithium2'):
+    """Verifies a quantum-resistant signature."""
+    sig = Signature(sig_algo)
+    try:
+        return sig.verify(json.dumps(data).encode(), signature, public_key)
+    except:
+        return False
+
+# --- 2. Blockchain Implementation (Decentralized Ledger) ---
+
+class Block:
+    def __init__(self, index, timestamp, data, previous_hash, creator_pk, signature):
+        self.index = index
+        self.timestamp = timestamp
+        self.data = data # This data would be the IPFS hash of the healthcare record
+        self.previous_hash = previous_hash
+        self.creator_pk = creator_pk
+        self.signature = signature # Signature of the data and previous hash by the creator
+        self.hash = self.hash_block()
+
+    def hash_block(self):
+        # Uses SHA-256 for the blockchain's integrity (not the data encryption)
+        block_string = json.dumps({
+            "index": self.index,
+            "timestamp": self.timestamp,
+            "data": self.data,
+            "previous_hash": self.previous_hash,
+            "creator_pk": self.creator_pk.hex(),
+            "signature": self.signature.hex()
+        }, sort_keys=True).encode()
+        return hashlib.sha256(block_string).hexdigest()
+
+class Blockchain:
+    def __init__(self):
+        self.chain = []
+        self.create_genesis_block()
+
+    def create_genesis_block(self):
+        # Genesis block does not need a previous hash or a signature as it is the first block
+        self.chain.append(Block(0, time(), "Genesis Block", "0", b'', b''))
+
+    @property
+    def last_block(self):
+        return self.chain[-1]
+
+    def add_block(self, new_block, creator_pk):
+        # In a real DApp, consensus mechanisms (e.g., PoW or PoS) would validate new blocks
+        # We also need to verify the signature of the block creator
+        if verify_signature_quantum_safe(creator_pk, new_block.data, new_block.signature):
+            new_block.previous_hash = self.last_block.hash
+            new_block.hash = new_block.hash_block()
+            self.chain.append(new_block)
+            return True
+        return False
+
+# --- 3. Simulation Example ---
+
+if __name__ == '__main__':
+    # 1. Initialize the decentralized ledger
+    healthcare_chain = Blockchain()
+    print("Blockchain initialized with genesis block.")
+
+    # 2. Simulate a patient and a doctor generating quantum-safe keys
+    patient_keys = generate_quantum_safe_keys()
+    doctor_keys = generate_quantum_safe_keys()
+    print(f"\nPatient and Doctor quantum-safe keys generated (using Dilithium2/Kyber512).")
+
+    # 3. Doctor prepares a healthcare record (simulated data)
+    # In a real scenario, this data would be encrypted using KEM and stored off-chain (e.g., IPFS)
+    patient_record_data = {
+        "patient_id": "P12345",
+        "doctor_id": "D67890",
+        "diagnosis": "Hypertension",
+        "treatment": "Medication A",
+        "date": "2025-11-05",
+        "data_hash_on_ipfs": "Qm...<IPFS_HASH_OF_ENCRYPTED_RECORD>..." 
+    }
+    
+    # 4. Doctor signs the record data
+    record_signature = sign_data_quantum_safe(doctor_keys['sig_sk'], patient_record_data)
+    print(f"\nDoctor signs the record using Dilithium2 signature scheme.")
+
+    # 5. Doctor creates a new block to add to the chain
+    # The block data contains the relevant metadata and a pointer to the off-chain data
+    new_block_data = {
+        "record_metadata": patient_record_data,
+        "signature": record_signature.hex()
+    }
+    
+    new_block = Block(
+        index=len(healthcare_chain.chain),
+        timestamp=time(),
+        data=new_block_data,
+        previous_hash=healthcare_chain.last_block.hash,
+        creator_pk=doctor_keys['sig_pk'],
+        signature=record_signature # Use the doctor's signature to sign the block itself
+    )
+
+    # 6. Add the block to the chain (verifies the signature)
+    if healthcare_chain.add_block(new_block, doctor_keys['sig_pk']):
+        print("New healthcare record block added successfully.")
+    else:
+        print("Failed to add block: Signature verification failed.")
+
+    # 7. Print the blockchain structure
+    print("\n--- Current Blockchain State ---")
+    for block in healthcare_chain.chain:
+        print(f"Block #{block.index}")
+        print(f"  Timestamp: {block.timestamp}")
+        print(f"  Data: {block.data}")
+        print(f"  Hash: {block.hash}")
+        print(f"  Previous Hash: {block.previous_hash[:10]}...")
+        print("-" * 20)
+
+
+
+
+
+
+
+
+
+
+
+The following Python code provides a basic simulation of the core components: a Block structure, a Blockchain ledger, and a simple demonstration of quantum-resistant key exchange and digital signatures using the third-party oqs Python library wrapper.
+Note: This code requires the installation of the liboqs-python library (pip install liboqs-python) and is a conceptual example, not a production-ready application.
