@@ -1,0 +1,44 @@
+def manage_student_fees(students_data):
+    """
+    Categorizes students based on their fee payment status.
+
+    Args:
+        students_data (list of dict): A list where each dictionary represents a student
+                                     and contains 'name' and 'fees_paid' (boolean) keys.
+
+    Returns:
+        tuple: A tuple containing two lists:
+               - fees_paid_students (list of str): Names of students who have paid fees.
+               - fees_not_paid_students (list of str): Names of students who have not paid fees.
+    """
+    fees_paid_students = []
+    fees_not_paid_students = []
+
+    for student in students_data:
+        if student.get('fees_paid'):  # Check if 'fees_paid' is True
+            fees_paid_students.append(student['name'])
+        else:
+            fees_not_paid_students.append(student['name'])
+
+    return fees_paid_students, fees_not_paid_students
+
+# Sample student data
+students = [
+    {'name': 'Alice', 'fees_paid': True},
+    {'name': 'Bob', 'fees_paid': False},
+    {'name': 'Charlie', 'fees_paid': True},
+    {'name': 'David', 'fees_paid': False},
+    {'name': 'Eve', 'fees_paid': True},
+]
+
+# Process the student data
+paid_students, not_paid_students = manage_student_fees(students)
+
+# Print the results
+print("Students who have paid fees:")
+for student_name in paid_students:
+    print(f"- {student_name}")
+
+print("\nStudents who have NOT paid fees:")
+for student_name in not_paid_students:
+    print(f"- {student_name}")
