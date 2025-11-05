@@ -1,0 +1,30 @@
+def process_command(command):
+    """Processes a simulated voice command and performs actions."""
+    command = command.lower()  # Convert command to lowercase for easier comparison
+
+    if "light on" in command:
+        print("Simulating: Turning the living room light ON.")
+    elif "light off" in command:
+        print("Simulating: Turning the living room light OFF.")
+    elif "fan on" in command:
+        print("Simulating: Turning the bedroom fan ON.")
+    elif "fan off" in command:
+        print("Simulating: Turning the bedroom fan OFF.")
+    elif "temperature" in command:
+        print("Simulating: Setting the thermostat to 22 degrees Celsius.")
+    elif "exit" in command or "quit" in command:
+        print("Exiting voice control simulation.")
+        return False  # Indicate to stop the loop
+    else:
+        print(f"Command '{command}' not recognized. Please try again.")
+    return True  # Indicate to continue the loop
+
+def main():
+    print("Voice-Controlled Home Automation Simulation (type 'exit' to quit)")
+    while True:
+        user_input = input("Enter your simulated voice command: ")
+        if not process_command(user_input):
+            break
+
+if __name__ == "__main__":
+    main()
