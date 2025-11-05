@@ -1,0 +1,58 @@
+class Student:
+    def __init__(self, name, roll_number):
+        self.name = name
+        self.roll_number = roll_number
+        self.subjects = {}  # Dictionary to store subject-wise marks
+
+    def add_marks(self, subject_name, marks):
+        if 0 <= marks <= 100:
+            self.subjects[subject_name] = marks
+        else:
+            print(f"Invalid marks for {subject_name}. Marks should be between 0 and 100.")
+
+    def calculate_average(self):
+        if not self.subjects:
+            return 0
+        total_marks = sum(self.subjects.values())
+        return total_marks / len(self.subjects)
+
+    def get_grade(self):
+        average = self.calculate_average()
+        if average >= 90:
+            return "A"
+        elif average >= 80:
+            return "B"
+        elif average >= 70:
+            return "C"
+        elif average >= 60:
+            return "D"
+        else:
+            return "F"
+
+    def display_progress(self):
+        print(f"\n--- Student Progress for {self.name} (Roll No: {self.roll_number}) ---")
+        for subject, marks in self.subjects.items():
+            print(f"  {subject}: {marks}")
+        average = self.calculate_average()
+        print(f"  Average Marks: {average:.2f}")
+        print(f"  Grade: {self.get_grade()}")
+
+# Example Usage
+if __name__ == "__main__":
+    student1 = Student("Alice Smith", "001")
+    student1.add_marks("Math", 85)
+    student1.add_marks("Science", 92)
+    student1.add_marks("English", 78)
+    student1.add_marks("History", 65)
+
+    student2 = Student("Bob Johnson", "002")
+    student2.add_marks("Math", 70)
+    student2.add_marks("Science", 80)
+    student2.add_marks("English", 95)
+
+    student1.display_progress()
+    student2.display_progress()
+
+    # Demonstrating adding more data or updating
+    student1.add_marks("Computer Science", 90)
+    student1.display_progress()
