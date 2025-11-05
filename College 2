@@ -1,0 +1,31 @@
+import random
+
+def college_chatbot(user_input):
+    user_input = user_input.lower()
+
+    if "hello" in user_input or "hi" in user_input:
+        return "Hello! How can I assist you with your college inquiry today?"
+    elif "courses" in user_input or "programs" in user_input:
+        return "We offer various programs like Computer Science, Engineering, Business Administration, and Arts. Which one are you interested in?"
+    elif "admission" in user_input or "apply" in user_input:
+        return "You can find admission details and application forms on our official college website under the 'Admissions' section."
+    elif "fees" in user_input or "fee structure" in user_input:
+        return "Information regarding fees for different courses is available on our website or you can contact the admissions office directly."
+    elif "location" in user_input or "address" in user_input:
+        return "Our college is located at [College Address]. You can find directions on our website."
+    elif "thank you" in user_input or "thanks" in user_input:
+        return "You're welcome! Feel free to ask if you have any more questions."
+    elif "bye" in user_input or "exit" in user_input:
+        return "Goodbye! Have a great day."
+    else:
+        return "I'm sorry, I don't have information on that specific query. Please try rephrasing your question or ask about common college inquiries."
+
+# Chat loop
+print("College Enquiry Chatbot: Hello! How can I assist you with your college inquiry today? (Type 'bye' to exit)")
+while True:
+    user_query = input("You: ")
+    if user_query.lower() in ["bye", "exit"]:
+        print(f"College Enquiry Chatbot: {college_chatbot(user_query)}")
+        break
+    response = college_chatbot(user_query)
+    print(f"College Enquiry Chatbot: {response}")
