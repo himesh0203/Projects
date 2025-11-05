@@ -1,0 +1,50 @@
+pip install chatterbot
+pip install chatterbot_corpus
+
+
+Chatbot Implementation:
+Create a Python file (e.g., course_chatbot.py) and add the following code: 
+
+
+from chatterbot import ChatBot
+from chatterbot.trainers import ChatterBotCorpusTrainer
+from chatterbot.trainers import ListTrainer
+
+# Create a new chatbot instance
+chatbot = ChatBot("CourseBot")
+
+# Create a new trainer for the chatbot
+trainer = ChatterBotCorpusTrainer(chatbot)
+
+# Train the chatbot with the English corpus data
+trainer.train("chatterbot.corpus.english")
+
+# You can also train the chatbot with custom course-specific data
+# For example, a list of questions and answers related to your course
+course_data = [
+    "What are the prerequisites for this course?",
+    "Basic Python knowledge and understanding of data structures.",
+    "How can I submit my assignments?",
+    "Assignments should be submitted through the online learning platform.",
+    "What is the grading policy?",
+    "Grading is based on assignments (40%), quizzes (30%), and a final project (30%).",
+    "Where can I find the course syllabus?",
+    "The course syllabus is available on the main course page.",
+    "When are the office hours?",
+    "Office hours are held on Tuesdays and Thursdays from 2 PM to 4 PM.",
+]
+
+list_trainer = ListTrainer(chatbot)
+list_trainer.train(course_data)
+
+# Start the interactive chat
+print("CourseBot: Hi! I am your course assistant. How can I help you today? (Type 'quit' to exit)")
+while True:
+    try:
+        user_input = input("You: ")
+        if user_input.lower() == "quit":
+            break
+        response = chatbot.get_response(user_input)
+        print(f"CourseBot: {response}")
+    except (KeyboardInterrupt, EOFError, SystemExit):
+        break
