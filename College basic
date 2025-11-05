@@ -1,0 +1,55 @@
+from chatterbot import ChatBot
+from chatterbot.trainers import ChatterBotCorpusTrainer
+
+# Create a new ChatBot instance
+chatbot = ChatBot('CollegeEnquiryBot')
+
+# Create a new trainer for the chatbot
+trainer = ChatterBotCorpusTrainer(chatbot)
+
+# Train the chatbot with college-specific data (example)
+# You would replace these with more comprehensive college-related conversations
+trainer.train(
+    "chatterbot.corpus.english.greetings",
+    "chatterbot.corpus.english.conversations",
+    "chatterbot.corpus.english.science" # Example, you could create a custom corpus
+)
+
+# You can also add custom training data for college inquiries
+trainer.train(
+    "chatterbot.corpus.english.colleges", # Assuming you create this file
+    "chatterbot.corpus.english.admissions", # Assuming you create this file
+    "chatterbot.corpus.english.courses", # Assuming you create this file
+)
+
+# Example of custom training data in a list format
+custom_college_data = [
+    "What courses are offered?",
+    "We offer courses in Engineering, Arts, Science, and Commerce.",
+    "How do I apply for admission?",
+    "You can apply online through our official website.",
+    "What is the fee structure for B.Tech?",
+    "The B.Tech fee structure varies by specialization; please refer to the admissions page.",
+    "Are there any scholarships available?",
+    "Yes, we offer various merit-based and need-based scholarships.",
+    "What are the hostel facilities like?",
+    "Our hostels provide comfortable accommodation with all necessary amenities.",
+]
+
+for i in range(0, len(custom_college_data), 2):
+    chatbot.train([custom_college_data[i], custom_college_data[i+1]])
+
+
+print("College Enquiry Chatbot: Hello! How can I assist you with your college inquiries?")
+
+# Main chat loop
+while True:
+    try:
+        user_input = input("You: ")
+        if user_input.lower() in ["exit", "quit", "bye"]:
+            print("College Enquiry Chatbot: Goodbye!")
+            break
+        response = chatbot.get_response(user_input)
+        print(f"College Enquiry Chatbot: {response}")
+    except (KeyboardInterrupt, EOFError, SystemExit):
+        break
