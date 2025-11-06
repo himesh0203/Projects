@@ -1,0 +1,54 @@
+pip install textblob
+
+
+python mood_playlist.py
+
+
+# mood_playlist.py
+# A fun Python script that suggests a playlist based on your mood or text.
+
+from textblob import TextBlob
+import random
+
+# Some predefined playlists
+playlists = {
+    "happy": ["Happy – Pharrell Williams", "Good Life – Kanye West", "Uptown Funk – Bruno Mars", "Can’t Stop the Feeling – Justin Timberlake"],
+    "sad": ["Someone Like You – Adele", "Fix You – Coldplay", "Let Her Go – Passenger", "Skinny Love – Bon Iver"],
+    "angry": ["Lose Yourself – Eminem", "Killing in the Name – Rage Against the Machine", "Break Stuff – Limp Bizkit", "Smells Like Teen Spirit – Nirvana"],
+    "relaxed": ["Weightless – Marconi Union", "Breezeblocks – Alt-J", "Banana Pancakes – Jack Johnson", "Holocene – Bon Iver"],
+    "neutral": ["Electric Feel – MGMT", "Midnight City – M83", "Dreams – Fleetwood Mac", "Yellow – Coldplay"]
+}
+
+def get_mood(text):
+    """Analyze text and determine mood using sentiment polarity."""
+    blob = TextBlob(text)
+    sentiment = blob.sentiment.polarity
+
+    if sentiment > 0.5:
+        return "happy"
+    elif sentiment < -0.3:
+        return "sad"
+    elif -0.3 <= sentiment <= 0.3:
+        return "neutral"
+    else:
+        return "relaxed"
+
+def generate_playlist(mood):
+    """Return a random selection of songs for the given mood."""
+    songs = playlists.get(mood, playlists["neutral"])
+    random.shuffle(songs)
+    return songs[:3]
+
+if __name__ == "__main__":
+    print("🎧 Welcome to the Mood-based Playlist Generator 🎶")
+    user_input = input("How are you feeling today (or describe your day)?\n> ")
+
+    mood = get_mood(user_input)
+    songs = generate_playlist(mood)
+
+    print(f"\nDetected mood: {mood.capitalize()}")
+    print("Here's your personalized playlist:")
+    for song in songs:
+        print(f" - {song}")
+
+    print("\nEnjoy your music! 🎵")
