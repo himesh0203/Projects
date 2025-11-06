@@ -1,0 +1,45 @@
+pip install openai
+
+export OPENAI_API_KEY="your-key-here"
+
+
+python ai_mood_playlist.py
+
+
+# ai_mood_playlist.py
+# A smarter version that uses OpenAI GPT to generate playlists based on mood or description.
+
+import openai
+import os
+
+# Set your OpenAI API key here or as an environment variable
+openai.api_key = os.getenv("OPENAI_API_KEY") or "your-api-key-here"
+
+def generate_playlist(prompt):
+    """
+    Use GPT to analyze mood and suggest a playlist.
+    """
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",  # or "gpt-4o" if you have access
+        messages=[
+            {"role": "system", "content": "You are a creative music curator who makes playlists that match people's moods."},
+            {"role": "user", "content": f"The user says: {prompt}. Suggest 5 songs that fit their mood."}
+        ],
+        temperature=0.8
+    )
+
+    return response.choices[0].message["content"].strip()
+
+def main():
+    print("🎧 Welcome to the AI-Powered Mood Playlist Generator 🎶")
+    user_input = input("Describe how you're feeling or your current vibe:\n> ")
+
+    print("\nAnalyzing your mood and finding the perfect songs... 🎵\n")
+
+    playlist = generate_playlist(user_input)
+    print("Here's your custom AI playlist:\n")
+    print(playlist)
+    print("\nEnjoy your music! 🎶")
+
+if __name__ == "__main__":
+    main()
