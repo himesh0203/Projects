@@ -1,0 +1,70 @@
+Install FastAPI and Uvicorn
+pip install fastapi uvicorn
+
+# main.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+# In-memory "database"
+items = {}
+
+# Model for request body
+class Item(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+# Root endpoint
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to my API!"}
+
+# Get item by ID
+@app.get("/items/{item_id}")
+def get_item(item_id: int):
+    item = items.get(item_id)
+    if item:
+        return item
+    return {"error": "Item not found"}
+
+# Create or update an item
+@app.post("/items/{item_id}")
+def create_item(item_id: int, item: Item):
+    items[item_id] = item
+    return {"message": f"Item {item_id} created/updated", "item": item}
+
+# Delete an item
+@app.delete("/items/{item_id}")
+def delete_item(item_id: int):
+    if item_id in items:
+        del items[item_id]
+        return {"message": f"Item {item_id} deleted"}
+    return {"error": "Item not found"}
+
+
+uvicorn main:app --reload
+
+Open http://127.0.0.1:8000/ in your browser → “Welcome to my API!”
+
+Interactive API docs: http://127.0.0.1:8000/docs
+
+
+
+
+import requests
+
+base_url = "http://127.0.0.1:8000"
+
+# Create item
+response = requests.post(f"{base_url}/items/1", json={"name":"Laptop","price":1200.50,"quantity":5})
+print(response.json())
+
+# Get item
+response = requests.get(f"{base_url}/items/1")
+print(response.json())
+
+# Delete item
+response = requests.delete(f"{base_url}/items/1")
+print(response.json())
