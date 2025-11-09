@@ -1,0 +1,68 @@
+To run this code:
+Install Pillow: If you haven't already, open your terminal or command prompt and run:
+Code
+
+    pip install Pillow
+Save the code: Save the code above as a Python file (e.g., screenshot_reminder.py).
+Run the script: Open your terminal or command prompt, navigate to the directory where you saved the file, and run:
+Code
+
+    python screenshot_reminder.py
+The script will start taking screenshots at the specified interval, saving them in the my_screenshots folder (or whatever you named it). Press Ctrl+C to stop the program.
+
+
+
+
+
+
+
+
+
+
+import time
+import os
+from datetime import datetime
+from PIL import ImageGrab # Requires Pillow library
+
+def take_screenshot(save_path):
+    """Takes a screenshot and saves it to the specified path."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"screenshot_{timestamp}.png"
+    full_path = os.path.join(save_path, filename)
+
+    try:
+        screenshot = ImageGrab.grab()
+        screenshot.save(full_path)
+        print(f"Screenshot saved: {full_path}")
+    except Exception as e:
+        print(f"Error taking screenshot: {e}")
+
+def auto_screenshot_reminder(interval_seconds, save_folder="screenshots"):
+    """
+    Takes screenshots automatically at a given interval.
+
+    Args:
+        interval_seconds (int): The time interval in seconds between screenshots.
+        save_folder (str): The name of the folder to save screenshots in.
+    """
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+        print(f"Created folder: {save_folder}")
+
+    print(f"Auto-Screenshot Reminder started. Taking screenshots every {interval_seconds} seconds.")
+    print(f"Screenshots will be saved in: {os.path.abspath(save_folder)}")
+    print("Press Ctrl+C to stop the program.")
+
+    try:
+        while True:
+            take_screenshot(save_folder)
+            time.sleep(interval_seconds)
+    except KeyboardInterrupt:
+        print("\nAuto-Screenshot Reminder stopped by user.")
+
+if __name__ == "__main__":
+    # --- Configuration ---
+    screenshot_interval = 300  # Take a screenshot every 300 seconds (5 minutes)
+    output_folder = "my_screenshots" # Folder to save screenshots
+
+    auto_screenshot_reminder(screenshot_interval, output_folder)
