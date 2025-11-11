@@ -1,0 +1,112 @@
+import time
+from datetime import datetime, timedelta
+
+class ParkingSlot:
+    def __init__(self, slot_id):
+        self.slot_id = slot_id
+        self.is_occupied = False
+        self.vehicle_number = None
+        self.entry_time = None
+
+    def park_vehicle(self, vehicle_number):
+        if not self.is_occupied:
+            self.is_occupied = True
+            self.vehicle_number = vehicle_number
+            self.entry_time = datetime.now()
+            print(f"✅ Vehicle {vehicle_number} parked in slot {self.slot_id} at {self.entry_time.strftime('%H:%M:%S')}")
+        else:
+            print(f"⚠️ Slot {self.slot_id} is already occupied.")
+
+    def remove_vehicle(self):
+        if self.is_occupied:
+            exit_time = datetime.now()
+            parked_duration = (exit_time - self.entry_time).total_seconds() / 60  # in minutes
+            fee = self.calculate_fee(parked_duration)
+            print(f"🚗 Vehicle {self.vehicle_number} leaving slot {self.slot_id} at {exit_time.strftime('%H:%M:%S')}")
+            print(f"🕒 Parked for {parked_duration:.2f} minutes. Fee: ₹{fee:.2f}")
+            # Reset slot
+            self.is_occupied = False
+            self.vehicle_number = None
+            self.entry_time = None
+        else:
+            print("⚠️ No vehicle in this slot.")
+
+    @staticmethod
+    def calculate_fee(duration_minutes):
+        """Simple rate: ₹10 for first hour, then ₹5 per extra hour."""
+        hours = duration_minutes / 60
+        if hours <= 1:
+            return 10
+        else:
+            return 10 + (hours - 1) * 5
+
+
+class ParkingLot:
+    def __init__(self, total_slots=10):
+        self.slots = [ParkingSlot(i+1) for i in range(total_slots)]
+        print(f"🅿️ Parking Lot initialized with {total_slots} slots.")
+
+    def get_available_slots(self):
+        available = [slot.slot_id for slot in self.slots if not slot.is_occupied]
+        print(f"Available slots: {available}")
+        return available
+
+    def park_vehicle(self, vehicle_number):
+        for slot in self.slots:
+            if not slot.is_occupied:
+                slot.park_vehicle(vehicle_number)
+                return
+        print("🚫 Parking Full! No available slots.")
+
+    def remove_vehicle(self, vehicle_number):
+        for slot in self.slots:
+            if slot.vehicle_number == vehicle_number:
+                slot.remove_vehicle()
+                return
+        print("❌ Vehicle not found in the parking lot.")
+
+    def display_status(self):
+        print("\n=== Parking Lot Status ===")
+        for slot in self.slots:
+            status = "Occupied" if slot.is_occupied else "Available"
+            print(f"Slot {slot.slot_id}: {status}", end='')
+            if slot.is_occupied:
+                print(f" - Vehicle: {slot.vehicle_number}")
+            else:
+                print()
+        print("==========================\n")
+
+
+# ---------- DEMO ----------
+if __name__ == "__main__":
+    parking_lot = ParkingLot(total_slots=5)
+
+    while True:
+        print("\n1. Park Vehicle")
+        print("2. Remove Vehicle")
+        print("3. Check Available Slots")
+        print("4. Display Parking Lot Status")
+        print("5. Exit")
+
+        choice = input("Enter choice: ")
+
+        if choice == '1':
+            vehicle_num = input("Enter vehicle number: ")
+            parking_lot.park_vehicle(vehicle_num)
+
+        elif choice == '2':
+            vehicle_num = input("Enter vehicle number to remove: ")
+            parking_lot.remove_vehicle(vehicle_num)
+
+        elif choice == '3':
+            parking_lot.get_available_slots()
+
+        elif choice == '4':
+            parking_lot.display_status()
+
+        elif choice == '5':
+            print("👋 Exiting Smart Parking System. Goodbye!")
+            break
+
+        else:
+            print("⚠️ Invalid choice, please try again.")
