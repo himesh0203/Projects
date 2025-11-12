@@ -1,0 +1,56 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.preprocessing import LabelEncoder
+
+# 1. Sample Data (replace with your actual dataset)
+data = {
+    'Weather': ['Clear', 'Rainy', 'Foggy', 'Clear', 'Rainy', 'Clear'],
+    'Road_Condition': ['Dry', 'Wet', 'Wet', 'Dry', 'Wet', 'Dry'],
+    'Time_of_Day': ['Day', 'Night', 'Day', 'Night', 'Day', 'Night'],
+    'Traffic_Density': [50, 80, 30, 70, 90, 40],
+    'Accident': [0, 1, 0, 1, 1, 0]  # 0 for no accident, 1 for accident
+}
+df = pd.DataFrame(data)
+
+# 2. Data Preprocessing
+# Encode categorical features
+label_encoders = {}
+for col in ['Weather', 'Road_Condition', 'Time_of_Day']:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le
+
+X = df.drop('Accident', axis=1)
+y = df['Accident']
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 3. Model Training
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# 4. Prediction and Evaluation
+y_pred = model.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# Example of a new prediction
+new_data = pd.DataFrame({
+    'Weather': ['Foggy'],
+    'Road_Condition': ['Wet'],
+    'Time_of_Day': ['Night'],
+    'Traffic_Density': [60]
+})
+
+# Encode new data using the same encoders
+for col in ['Weather', 'Road_Condition', 'Time_of_Day']:
+    new_data[col] = label_encoders[col].transform(new_data[col])
+
+prediction = model.predict(new_data)
+if prediction[0] == 1:
+    print("\nPredicted: High risk of accident.")
+else:
+    print("\nPredicted: Low risk of accident.")
