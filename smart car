@@ -1,0 +1,136 @@
+pip install pandas scikit-learn numpy joblib
+
+"""
+Smart Parking System (AI-Powered)
+Author: ChatGPT (GPT-5)
+Description:
+A simple AI-based smart parking system that:
+- Tracks parking slots
+- Predicts slot availability using ML
+- Assigns best slots dynamically
+"""
+
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import joblib
+import random
+from datetime import datetime
+
+# --------------------------------------------------------
+# 1️⃣ Create or Load Parking Dataset (Simulation Example)
+# --------------------------------------------------------
+# Each record: [Hour, Day_of_Week, Weather(0=Clear,1=Rainy,2=Cloudy), Special_Event(0/1), Occupancy(0=Free,1=Occupied)]
+data = []
+for _ in range(200):
+    hour = random.randint(0, 23)
+    day = random.randint(0, 6)  # 0=Monday
+    weather = random.choice([0, 1, 2])
+    event = random.choice([0, 1])
+    # Simulate occupancy: high chance of occupied during rush hours
+    occupied = 1 if (7 <= hour <= 9 or 17 <= hour <= 20 or event == 1) else random.choice([0, 1])
+    data.append([hour, day, weather, event, occupied])
+
+df = pd.DataFrame(data, columns=["Hour", "Day", "Weather", "Event", "Occupancy"])
+
+# --------------------------------------------------------
+# 2️⃣ Train AI Model for Parking Prediction
+# --------------------------------------------------------
+X = df[["Hour", "Day", "Weather", "Event"]]
+y = df["Occupancy"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+pred = model.predict(X_test)
+print(f"✅ Model trained. Accuracy: {round(accuracy_score(y_test, pred)*100, 2)}%")
+
+joblib.dump(model, "smart_parking_model.pkl")
+print("🚗 Model saved as 'smart_parking_model.pkl'\n")
+
+# --------------------------------------------------------
+# 3️⃣ Parking Lot Simulation
+# --------------------------------------------------------
+TOTAL_SLOTS = 10
+parking_slots = {f"SLOT-{i+1}": None for i in range(TOTAL_SLOTS)}  # None means empty
+
+
+def show_parking_status():
+    print("\n🅿️  Current Parking Slots Status:")
+    for slot, car in parking_slots.items():
+        status = "🟩 Free" if car is None else f"🟥 Occupied by {car}"
+        print(f"{slot}: {status}")
+
+
+# --------------------------------------------------------
+# 4️⃣ AI Prediction for Slot Availability
+# --------------------------------------------------------
+def predict_parking_availability(hour=None, day=None, weather=0, event=0):
+    """
+    Predicts whether parking is likely available at a given time.
+    Returns probability of free slots.
+    """
+    model = joblib.load("smart_parking_model.pkl")
+
+    if hour is None:
+        hour = datetime.now().hour
+    if day is None:
+        day = datetime.now().weekday()
+
+    X_new = np.array([[hour, day, weather, event]])
+    prediction = model.predict(X_new)[0]
+    prob = model.predict_proba(X_new)[0][0]  # probability of free slot
+
+    status = "🟩 Likely Available" if prediction == 0 else "🟥 Likely Full"
+    print(f"\n⏰ Time: {hour}:00, Day: {day}, Weather: {weather}, Event: {event}")
+    print(f"Prediction: {status} (Free Probability: {round(prob*100, 2)}%)\n")
+
+    return prediction
+
+
+# --------------------------------------------------------
+# 5️⃣ Manage Car Entry and Exit
+# --------------------------------------------------------
+def park_car(car_id):
+    for slot, occupant in parking_slots.items():
+        if occupant is None:
+            parking_slots[slot] = car_id
+            print(f"✅ Car {car_id} parked in {slot}")
+            return
+    print("❌ No available slots! Parking is full.")
+
+
+def remove_car(car_id):
+    for slot, occupant in parking_slots.items():
+        if occupant == car_id:
+            parking_slots[slot] = None
+            print(f"🚗 Car {car_id} has exited from {slot}")
+            return
+    print("⚠️ Car not found in parking lot.")
+
+
+# --------------------------------------------------------
+# 6️⃣ Run the Smart Parking Simulation
+# --------------------------------------------------------
+if __name__ == "__main__":
+    print("🚘 SMART PARKING SYSTEM INITIALIZED 🚘")
+    show_parking_status()
+
+    # Predict parking availability
+    predict_parking_availability(hour=18, weather=1, event=1)
+
+    # Simulate car entry
+    park_car("KA-01-AB-1234")
+    park_car("KA-02-CD-5678")
+    show_parking_status()
+
+    # Simulate car exit
+    remove_car("KA-01-AB-1234")
+    show_parking_status()
+
+    # Predict again at a different time
+    predict_parking_availability(hour=10, weather=0, event=0)
