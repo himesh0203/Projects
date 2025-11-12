@@ -1,0 +1,110 @@
+# Smart Traffic Accident Prediction System
+# Author: ChatGPT (GPT-5)
+# Description: Predicts the likelihood of an accident based on environmental and traffic conditions.
+
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import joblib
+
+# -----------------------------
+# 1. Load Dataset
+# -----------------------------
+# Replace 'traffic_accident_data.csv' with your actual dataset file
+data = pd.read_csv('traffic_accident_data.csv')
+
+print("Dataset Loaded Successfully!")
+print(data.head())
+
+# -----------------------------
+# 2. Preprocessing
+# -----------------------------
+# Encode categorical variables
+label_encoders = {}
+for column in data.select_dtypes(include=['object']).columns:
+    le = LabelEncoder()
+    data[column] = le.fit_transform(data[column])
+    label_encoders[column] = le
+
+# Separate features (X) and target (y)
+X = data.drop('Accident', axis=1)
+y = data['Accident']
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# -----------------------------
+# 3. Train Model
+# -----------------------------
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# -----------------------------
+# 4. Evaluate Model
+# -----------------------------
+y_pred = model.predict(X_test)
+
+print("\nModel Evaluation:")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
+
+# -----------------------------
+# 5. Save Model for Later Use
+# -----------------------------
+joblib.dump((model, label_encoders), 'traffic_accident_model.pkl')
+print("\nModel saved as 'traffic_accident_model.pkl'.")
+
+# -----------------------------
+# 6. Predict Function
+# -----------------------------
+def predict_accident(input_data):
+    """
+    input_data: dict containing feature values
+    Example:
+    {
+        'Weather_Condition': 'Rainy',
+        'Traffic_Density': 'High',
+        'Visibility': 2,
+        'Road_Type': 'Highway',
+        'Time_of_Day': 'Night'
+    }
+    """
+    # Load model
+    model, label_encoders = joblib.load('traffic_accident_model.pkl')
+
+    # Convert input into dataframe
+    input_df = pd.DataFrame([input_data])
+
+    # Encode categorical values using stored label encoders
+    for column in input_df.select_dtypes(include=['object']).columns:
+        if column in label_encoders:
+            input_df[column] = label_encoders[column].transform(input_df[column])
+
+    # Predict
+    prediction = model.predict(input_df)[0]
+    probability = model.predict_proba(input_df)[0][1]  # Probability of accident
+
+    result = {
+        "Accident_Predicted": bool(prediction),
+        "Accident_Probability": round(probability * 100, 2)
+    }
+
+    return result
+
+# -----------------------------
+# 7. Example Prediction
+# -----------------------------
+example_input = {
+    'Weather_Condition': 'Rainy',
+    'Traffic_Density': 'High',
+    'Visibility': 3,
+    'Road_Type': 'Highway',
+    'Time_of_Day': 'Night'
+}
+
+result = predict_accident(example_input)
+print("\nPrediction Result:", result)
