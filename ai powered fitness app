@@ -1,0 +1,116 @@
+pip install pandas scikit-learn numpy joblib
+
+"""
+AI-Powered Fitness App
+Author: ChatGPT (GPT-5)
+Description:
+A simple AI-based fitness assistant that recommends workouts,
+predicts calorie needs, and generates meal suggestions based on user data.
+"""
+
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
+import joblib
+import random
+
+# --------------------------------------------------
+# 1️⃣ Create a sample dataset (for demonstration)
+# --------------------------------------------------
+# Each row: [Age, Weight(kg), Height(cm), Activity_Level(1–5), Goal(1=Lose, 2=Maintain, 3=Gain), Daily_Calories]
+data = [
+    [22, 68, 172, 3, 1, 2100],
+    [30, 75, 178, 4, 2, 2500],
+    [25, 60, 165, 2, 1, 1800],
+    [40, 90, 180, 2, 1, 2300],
+    [29, 82, 175, 4, 3, 2900],
+    [19, 55, 160, 3, 3, 2400],
+    [35, 70, 170, 5, 2, 2700],
+    [50, 85, 175, 2, 1, 2200],
+    [45, 68, 172, 1, 1, 1900],
+    [33, 90, 185, 5, 3, 3200],
+]
+
+columns = ["Age", "Weight", "Height", "Activity_Level", "Goal", "Daily_Calories"]
+df = pd.DataFrame(data, columns=columns)
+
+# --------------------------------------------------
+# 2️⃣ Train a simple AI calorie prediction model
+# --------------------------------------------------
+X = df[["Age", "Weight", "Height", "Activity_Level", "Goal"]]
+y = df["Daily_Calories"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+pred = model.predict(X_test)
+print("Model Accuracy (R2):", round(r2_score(y_test, pred), 2))
+
+joblib.dump(model, "fitness_model.pkl")
+print("✅ Model saved as 'fitness_model.pkl'\n")
+
+# --------------------------------------------------
+# 3️⃣ AI Recommendation Engine
+# --------------------------------------------------
+def ai_fitness_recommender(user):
+    """
+    user: dict
+    Example:
+        {
+            'Age': 25,
+            'Weight': 70,
+            'Height': 175,
+            'Activity_Level': 3,
+            'Goal': 1   # 1=Lose, 2=Maintain, 3=Gain
+        }
+    """
+    model = joblib.load("fitness_model.pkl")
+
+    user_input = np.array([[user['Age'], user['Weight'], user['Height'],
+                            user['Activity_Level'], user['Goal']]])
+
+    calorie_needs = int(model.predict(user_input)[0])
+
+    # Generate recommendations based on goal
+    if user['Goal'] == 1:
+        workouts = ["Running (30 min)", "Cycling (20 min)", "HIIT (15 min)", "Yoga (30 min)"]
+        meals = ["Grilled chicken salad", "Oatmeal with fruits", "Smoothie bowl", "Vegetable soup"]
+    elif user['Goal'] == 2:
+        workouts = ["Brisk walking", "Light jogging", "Bodyweight workout", "Swimming (20 min)"]
+        meals = ["Balanced rice bowl", "Fish and vegetables", "Whole grain sandwich", "Fruit snacks"]
+    else:
+        workouts = ["Weight lifting", "Push-ups + Squats", "Protein training", "Resistance bands"]
+        meals = ["Chicken and rice", "Egg omelet + Avocado", "Protein smoothie", "Nuts and yogurt"]
+
+    plan = {
+        "Recommended_Daily_Calories": calorie_needs,
+        "Workout_Plan": random.sample(workouts, 2),
+        "Meal_Suggestions": random.sample(meals, 2)
+    }
+
+    return plan
+
+
+# --------------------------------------------------
+# 4️⃣ Example: Get Personalized Recommendations
+# --------------------------------------------------
+user_profile = {
+    'Age': 27,
+    'Weight': 72,
+    'Height': 178,
+    'Activity_Level': 4,
+    'Goal': 3  # 1=Lose, 2=Maintain, 3=Gain
+}
+
+result = ai_fitness_recommender(user_profile)
+
+print("🏋️ AI Fitness Recommendation 🏋️")
+print("----------------------------------")
+print(f"👤 User: {user_profile}")
+print(f"🔥 Recommended Daily Calories: {result['Recommended_Daily_Calories']} kcal")
+print(f"💪 Workout Plan: {result['Workout_Plan']}")
+print(f"🥗 Meal Suggestions: {result['Meal_Suggestions']}")
