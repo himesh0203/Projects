@@ -1,0 +1,123 @@
+pip install nltk scikit-learn numpy pandas
+
+"""
+AI-Enhanced Chatbot
+Author: ChatGPT (GPT-5)
+Description:
+A context-aware chatbot using NLP and machine learning (TF-IDF + Logistic Regression).
+You can extend it with APIs or a neural network for deeper understanding.
+"""
+
+import random
+import json
+import numpy as np
+import pandas as pd
+import nltk
+from nltk.stem import WordNetLemmatizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+import joblib
+
+nltk.download('punkt')
+nltk.download('wordnet')
+
+# ---------------------------------------------
+# 1️⃣ Define Training Data (Intents)
+# ---------------------------------------------
+intents = {
+    "intents": [
+        {"tag": "greeting",
+         "patterns": ["Hi", "Hello", "Hey", "Good morning", "Good evening"],
+         "responses": ["Hello there!", "Hi! How can I assist you?", "Hey! What’s up?"]},
+
+        {"tag": "goodbye",
+         "patterns": ["Bye", "See you", "Goodbye", "Talk to you later"],
+         "responses": ["Goodbye!", "See you later!", "Take care!"]},
+
+        {"tag": "thanks",
+         "patterns": ["Thanks", "Thank you", "Appreciate it"],
+         "responses": ["You're welcome!", "No problem!", "Glad I could help!"]},
+
+        {"tag": "fitness",
+         "patterns": ["Suggest a workout", "I want to lose weight", "Best exercise for arms"],
+         "responses": ["Try 30 mins of cardio and light weights!", 
+                       "Push-ups and planks are great for arms!", 
+                       "A mix of HIIT and strength training works best."]},
+
+        {"tag": "weather",
+         "patterns": ["What's the weather like?", "Is it raining?", "Weather forecast"],
+         "responses": ["I’m not connected to live weather APIs, but you can check online!",
+                       "I can integrate weather updates if you connect an API."]},
+
+        {"tag": "name",
+         "patterns": ["What is your name?", "Who are you?", "Identify yourself"],
+         "responses": ["I'm your AI-powered assistant.", "You can call me FitBot!"]}
+    ]
+}
+
+# ---------------------------------------------
+# 2️⃣ Preprocess the Data
+# ---------------------------------------------
+lemmatizer = WordNetLemmatizer()
+corpus = []
+tags = []
+
+for intent in intents["intents"]:
+    for pattern in intent["patterns"]:
+        tokens = nltk.word_tokenize(pattern.lower())
+        tokens = [lemmatizer.lemmatize(w) for w in tokens]
+        corpus.append(" ".join(tokens))
+        tags.append(intent["tag"])
+
+df = pd.DataFrame({"patterns": corpus, "tags": tags})
+
+# ---------------------------------------------
+# 3️⃣ Vectorize Text + Train ML Model
+# ---------------------------------------------
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(df["patterns"])
+y = df["tags"]
+
+model = LogisticRegression()
+model.fit(X, y)
+
+joblib.dump((model, vectorizer, intents), "ai_chatbot_model.pkl")
+print("✅ Chatbot model trained and saved as 'ai_chatbot_model.pkl'")
+
+# ---------------------------------------------
+# 4️⃣ Chat Function
+# ---------------------------------------------
+def ai_chatbot_response(user_input):
+    model, vectorizer, intents = joblib.load("ai_chatbot_model.pkl")
+    lemmatizer = WordNetLemmatizer()
+
+    user_input_clean = " ".join(
+        [lemmatizer.lemmatize(w.lower()) for w in nltk.word_tokenize(user_input)]
+    )
+
+    X_test = vectorizer.transform([user_input_clean])
+    predicted_tag = model.predict(X_test)[0]
+
+    # Get matching intent
+    for intent in intents["intents"]:
+        if intent["tag"] == predicted_tag:
+            response = random.choice(intent["responses"])
+            break
+    else:
+        response = "I'm not sure I understand. Can you rephrase that?"
+
+    return response
+
+# ---------------------------------------------
+# 5️⃣ Interactive Chat Loop
+# ---------------------------------------------
+print("\n🤖 AI Chatbot is ready to talk! (type 'quit' to exit)\n")
+
+while True:
+    user_input = input("You: ")
+    if user_input.lower() in ["quit", "exit", "bye"]:
+        print("Bot: Goodbye! 👋")
+        break
+
+    response = ai_chatbot_response(user_input)
+    print("Bot:", response)
