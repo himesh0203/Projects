@@ -1,0 +1,117 @@
+Setup
+# requirements.txt
+pandas==2.2.2
+scikit-learn==1.5.2
+nltk==3.9.1
+
+
+
+Training script
+# spam_filter.py
+import pandas as pd
+import nltk
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report, confusion_matrix
+
+# Download NLTK stopwords if not already
+nltk.download("stopwords")
+from nltk.corpus import stopwords
+
+def load_dataset():
+    """
+    Example dataset: SMS Spam Collection (UCI/Kaggle).
+    CSV format: label,text
+    label: 'ham' or 'spam'
+    """
+    df = pd.read_csv("spam.csv", encoding="latin-1")
+    # Adjust columns if dataset has extra ones
+    df = df[["v1", "v2"]]
+    df.columns = ["label", "text"]
+    return df
+
+def build_pipeline():
+    stop_words = stopwords.words("english")
+    pipeline = Pipeline([
+        ("tfidf", TfidfVectorizer(stop_words=stop_words)),
+        ("clf", MultinomialNB())
+    ])
+    return pipeline
+
+def main():
+    df = load_dataset()
+    X = df["text"]
+    y = df["label"].map({"ham":0, "spam":1})  # convert to 0/1
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    pipeline = build_pipeline()
+    pipeline.fit(X_train, y_train)
+
+    y_pred = pipeline.predict(X_test)
+
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
+
+    # Save model
+    import joblib
+    joblib.dump(pipeline, "spam_model.joblib")
+    print("Model saved as spam_model.joblib")
+
+if __name__ == "__main__":
+    main()
+
+
+
+Inference script
+# predict.py
+import joblib
+
+pipeline = joblib.load("spam_model.joblib")
+
+def predict_message(msg: str):
+    prob = pipeline.predict_proba([msg])[0,1]
+    label = pipeline.predict([msg])[0]
+    return {"label": "spam" if label==1 else "ham", "probability_spam": prob}
+
+if __name__ == "__main__":
+    test_msgs = [
+        "Congratulations! You've won a free ticket. Call now!",
+        "Hey, are we still meeting for lunch today?"
+    ]
+    for m in test_msgs:
+        print(m, "->", predict_message(m))
+
+
+
+
+
+
+Running
+Download the SMS Spam Collection dataset (UCI ML repository or Kaggle).
+
+Save as spam.csv in your project folder.
+
+Run training:
+
+bash
+python spam_filter.py
+Run inference:
+
+bash
+python predict.py
+
+
+
+Extensions
+Feature engineering: Add character n-grams, punctuation counts, or message length.
+
+Models: Try Logistic Regression, Random Forest, or deep learning (LSTM, BERT).
+
+Deployment: Wrap inference in FastAPI for real-time spam detection.
+
+Evaluation: Use precision-recall curves; false negatives (missed spam) vs false positives (ham flagged as spam).
