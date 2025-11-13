@@ -1,0 +1,99 @@
+Requirements
+text
+pandas==2.2.2
+scikit-learn==1.5.2
+joblib==1.4.2
+
+
+
+Training Script
+# train_fake_news.py
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report, confusion_matrix
+import joblib
+
+def load_dataset(path="news.csv"):
+    """
+    Expected CSV format: id, title, text, label
+    label: 1 = fake, 0 = real
+    """
+    df = pd.read_csv(path)
+    # Combine title + text for richer features
+    df["content"] = df["title"].fillna("") + " " + df["text"].fillna("")
+    return df["content"], df["label"]
+
+def build_pipeline():
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(stop_words="english", max_df=0.9)),
+        ("clf", LogisticRegression(max_iter=2000, class_weight="balanced"))
+    ])
+
+def main():
+    X, y = load_dataset("news.csv")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    pipe = build_pipeline()
+    pipe.fit(X_train, y_train)
+
+    y_pred = pipe.predict(X_test)
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
+
+    joblib.dump(pipe, "fake_news_model.joblib")
+    print("✅ Model saved as fake_news_model.joblib")
+
+if __name__ == "__main__":
+    main()
+
+
+
+Inference Script
+# predict_fake_news.py
+import joblib
+
+pipe = joblib.load("fake_news_model.joblib")
+
+def predict_article(text: str):
+    prob = pipe.predict_proba([text])[0,1]
+    label = pipe.predict([text])[0]
+    return {
+        "label": "FAKE" if label==1 else "REAL",
+        "probability_fake": prob
+    }
+
+if __name__ == "__main__":
+    sample = """Breaking: Scientists discover water on Mars in unprecedented detail..."""
+    print(predict_article(sample))
+
+
+Running the System
+Prepare dataset (e.g., Kaggle Fake News dataset).
+
+Save as news.csv with columns: title, text, label.
+
+Train:
+
+bash
+python train_fake_news.py
+Predict:
+
+bash
+python predict_fake_news.py
+
+
+
+Extensions
+Advanced models: Try LSTM, BERT, or DistilBERT for better accuracy.
+
+Explainability: Use SHAP or LIME to show which words influenced predictions.
+
+Deployment: Wrap inference in FastAPI or Flask for real-time detection.
+
+Data enrichment: Add metadata features (source, author, publish date).
+
