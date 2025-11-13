@@ -1,0 +1,438 @@
+Setup
+Requirements: Python 3.9+, pip install flask
+
+Run: Save as app.py, then python app.py
+
+Key endpoints:
+
+POST /users, GET /users/<user_id>
+
+POST /exams, GET /exams
+
+POST /questions, GET /exam/<exam_id>
+
+POST /exam/<exam_id>/publish
+
+POST /attempt/start, GET /attempt/<attempt_id>/next, POST /attempt/<attempt_id>/submit
+
+GET /results/<attempt_id>, GET /analytics/<exam_id>
+
+
+
+# app.py
+import json
+import uuid
+import random
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+DATA_FILE = "exam_data.json"
+
+USERS: Dict[str, Dict[str, Any]] = {}
+EXAMS: Dict[str, Dict[str, Any]] = {}
+QUESTIONS: Dict[str, Dict[str, Any]] = {}   # question_id -> question
+ATTEMPTS: Dict[str, Dict[str, Any]] = {}    # attempt_id -> session
+RESULTS: Dict[str, Dict[str, Any]] = {}     # attempt_id -> result
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({
+            "USERS": USERS,
+            "EXAMS": EXAMS,
+            "QUESTIONS": QUESTIONS,
+            "ATTEMPTS": ATTEMPTS,
+            "RESULTS": RESULTS
+        }, f, indent=2, default=str)
+
+def load_data():
+    global USERS, EXAMS, QUESTIONS, ATTEMPTS, RESULTS
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            USERS = data.get("USERS", {})
+            EXAMS = data.get("EXAMS", {})
+            QUESTIONS = data.get("QUESTIONS", {})
+            ATTEMPTS = data.get("ATTEMPTS", {})
+            RESULTS = data.get("RESULTS", {})
+    except FileNotFoundError:
+        pass
+
+load_data()
+
+# ---------------------------
+# Helpers
+# ---------------------------
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+def within_window(exam: Dict[str, Any]) -> bool:
+    start = datetime.fromisoformat(exam["start_time"])
+    end = datetime.fromisoformat(exam["end_time"])
+    now = datetime.utcnow()
+    return start <= now <= end
+
+def exam_question_ids(exam_id: str) -> List[str]:
+    exam = EXAMS[exam_id]
+    ids = []
+    for sec in exam.get("sections", []):
+        ids.extend(sec.get("question_ids", []))
+    return ids
+
+def shuffle_options(options: List[str], correct_index: int) -> (List[str], int):
+    pairs = list(enumerate(options))
+    random.shuffle(pairs)
+    new_options = [opt for _, opt in pairs]
+    new_correct_idx = next(i for i, (old_i, _) in enumerate(pairs) if old_i == correct_index)
+    return new_options, new_correct_idx
+
+def grade_single(question: Dict[str, Any], chosen_index: Optional[int]) -> float:
+    if chosen_index is None:
+        return 0.0
+    return float(question["marks"] if chosen_index == question["correct_index"] else 0.0)
+
+# ---------------------------
+# Seed demo exam (optional)
+# ---------------------------
+if not EXAMS:
+    exam_id = new_id("exam")
+    q1 = new_id("q")
+    q2 = new_id("q")
+    q3 = new_id("q")
+
+    QUESTIONS[q1] = {
+        "id": q1, "type": "mcq_single", "text": "Capital of India?",
+        "options": ["Mumbai", "Delhi", "Kolkata", "Chennai"], "correct_index": 1, "marks": 2
+    }
+    QUESTIONS[q2] = {
+        "id": q2, "type": "mcq_single", "text": "2 + 2 = ?",
+        "options": ["3", "4", "5", "22"], "correct_index": 1, "marks": 1
+    }
+    QUESTIONS[q3] = {
+        "id": q3, "type": "mcq_single", "text": "Python list is ...",
+        "options": ["Immutable", "Mutable", "Static", "None"], "correct_index": 1, "marks": 2
+    }
+
+    EXAMS[exam_id] = {
+        "id": exam_id,
+        "title": "General Knowledge & Basics",
+        "description": "Demo exam with MCQs.",
+        "sections": [{"title": "Section A", "question_ids": [q1, q2, q3]}],
+        "duration_min": 20,
+        "start_time": (datetime.utcnow() - timedelta(minutes=10)).isoformat(),
+        "end_time": (datetime.utcnow() + timedelta(hours=12)).isoformat(),
+        "published": True,
+        "negative_marking": 0.0,  # per wrong answer penalty (e.g., 0.25)
+        "shuffle_questions": True,
+        "shuffle_options": True,
+        "max_attempts": 1
+    }
+    save_data()
+
+# ---------------------------
+# API
+# ---------------------------
+
+@app.route("/users", methods=["POST"])
+def create_user():
+    payload = request.get_json(force=True)
+    user_id = new_id("user")
+    USERS[user_id] = {
+        "id": user_id, "name": payload.get("name", "Candidate"), "email": payload.get("email", ""),
+        "created_at": now_iso()
+    }
+    save_data()
+    return jsonify(USERS[user_id]), 201
+
+@app.route("/users/<user_id>", methods=["GET"])
+def get_user(user_id):
+    u = USERS.get(user_id)
+    if not u:
+        return jsonify({"error": "user not found"}), 404
+    return jsonify(u)
+
+@app.route("/exams", methods=["POST"])
+def create_exam():
+    payload = request.get_json(force=True)
+    exam_id = new_id("exam")
+    EXAMS[exam_id] = {
+        "id": exam_id,
+        "title": payload.get("title", "Untitled Exam"),
+        "description": payload.get("description", ""),
+        "sections": payload.get("sections", []),  # [{"title": "...", "question_ids": ["q_..."]}]
+        "duration_min": int(payload.get("duration_min", 60)),
+        "start_time": payload.get("start_time", (datetime.utcnow() + timedelta(minutes=1)).isoformat()),
+        "end_time": payload.get("end_time", (datetime.utcnow() + timedelta(hours=6)).isoformat()),
+        "published": False,
+        "negative_marking": float(payload.get("negative_marking", 0.0)),
+        "shuffle_questions": bool(payload.get("shuffle_questions", True)),
+        "shuffle_options": bool(payload.get("shuffle_options", True)),
+        "max_attempts": int(payload.get("max_attempts", 1))
+    }
+    save_data()
+    return jsonify(EXAMS[exam_id]), 201
+
+@app.route("/exams", methods=["GET"])
+def list_exams():
+    return jsonify({"exams": list(EXAMS.values())})
+
+@app.route("/questions", methods=["POST"])
+def create_question():
+    payload = request.get_json(force=True)
+    question_id = new_id("q")
+    q = {
+        "id": question_id,
+        "type": payload.get("type", "mcq_single"),
+        "text": payload.get("text", ""),
+        "options": payload.get("options", []),
+        "correct_index": int(payload.get("correct_index", 0)),
+        "marks": float(payload.get("marks", 1.0))
+    }
+    QUESTIONS[question_id] = q
+    save_data()
+    return jsonify(q), 201
+
+@app.route("/exam/<exam_id>", methods=["GET"])
+def get_exam(exam_id):
+    e = EXAMS.get(exam_id)
+    if not e:
+        return jsonify({"error": "exam not found"}), 404
+    outline = []
+    for sec in e.get("sections", []):
+        outline.append({"title": sec["title"], "question_count": len(sec.get("question_ids", []))})
+    return jsonify({"exam": e, "outline": outline})
+
+@app.route("/exam/<exam_id>/publish", methods=["POST"])
+def publish_exam(exam_id):
+    e = EXAMS.get(exam_id)
+    if not e:
+        return jsonify({"error": "exam not found"}), 404
+    e["published"] = True
+    save_data()
+    return jsonify({"status": "published", "exam_id": exam_id})
+
+@app.route("/attempt/start", methods=["POST"])
+def start_attempt():
+    payload = request.get_json(force=True)
+    user_id = payload.get("user_id")
+    exam_id = payload.get("exam_id")
+    if user_id not in USERS or exam_id not in EXAMS:
+        return jsonify({"error": "user or exam not found"}), 404
+    exam = EXAMS[exam_id]
+    if not exam["published"]:
+        return jsonify({"error": "exam not published"}), 400
+    if not within_window(exam):
+        return jsonify({"error": "exam not in active window"}), 400
+    # enforce max attempts
+    prev = [a for a in ATTEMPTS.values() if a["user_id"] == user_id and a["exam_id"] == exam_id]
+    if len(prev) >= exam.get("max_attempts", 1):
+        return jsonify({"error": "max attempts reached"}), 403
+
+    attempt_id = new_id("attempt")
+    qids = exam_question_ids(exam_id)
+    if exam.get("shuffle_questions", True):
+        random.shuffle(qids)
+
+    # build per-question option shuffle map
+    option_map = {}
+    for qid in qids:
+        q = QUESTIONS[qid]
+        if exam.get("shuffle_options", True):
+            new_opts, new_correct = shuffle_options(q["options"], q["correct_index"])
+            option_map[qid] = {"options": new_opts, "correct_index": new_correct}
+        else:
+            option_map[qid] = {"options": q["options"], "correct_index": q["correct_index"]}
+
+    ATTEMPTS[attempt_id] = {
+        "id": attempt_id,
+        "user_id": user_id,
+        "exam_id": exam_id,
+        "question_ids": qids,
+        "answers": {},  # qid -> chosen_index
+        "option_map": option_map,
+        "start_time": now_iso(),
+        "end_time": (datetime.utcnow() + timedelta(minutes=exam["duration_min"])).isoformat(),
+        "status": "in_progress"
+    }
+    save_data()
+    return jsonify({"attempt_id": attempt_id, "end_time": ATTEMPTS[attempt_id]["end_time"]})
+
+@app.route("/attempt/<attempt_id>/next", methods=["GET"])
+def next_question(attempt_id):
+    a = ATTEMPTS.get(attempt_id)
+    if not a:
+        return jsonify({"error": "attempt not found"}), 404
+    if a["status"] != "in_progress":
+        return jsonify({"error": "attempt not active"}), 400
+    if datetime.utcnow() > datetime.fromisoformat(a["end_time"]):
+        a["status"] = "expired"
+        save_data()
+        return jsonify({"error": "time expired"}), 403
+
+    # find next unanswered
+    for qid in a["question_ids"]:
+        if qid not in a["answers"]:
+            q = QUESTIONS[qid]
+            opts = a["option_map"][qid]["options"]
+            return jsonify({"question_id": qid, "text": q["text"], "options": opts, "marks": q["marks"]})
+    return jsonify({"message": "all questions answered"})
+
+@app.route("/attempt/<attempt_id>/submit", methods=["POST"])
+def submit_answer(attempt_id):
+    payload = request.get_json(force=True)
+    qid = payload.get("question_id")
+    chosen = payload.get("chosen_index")  # int or null
+    a = ATTEMPTS.get(attempt_id)
+
+    if not a:
+        return jsonify({"error": "attempt not found"}), 404
+    if a["status"] != "in_progress":
+        return jsonify({"error": "attempt not active"}), 400
+    if datetime.utcnow() > datetime.fromisoformat(a["end_time"]):
+        a["status"] = "expired"
+        save_data()
+        return jsonify({"error": "time expired"}), 403
+    if qid not in a["question_ids"]:
+        return jsonify({"error": "question not in attempt"}), 400
+
+    # record answer
+    a["answers"][qid] = None if chosen is None else int(chosen)
+    save_data()
+
+    # progress summary
+    total = len(a["question_ids"])
+    answered = len(a["answers"])
+    return jsonify({"status": "saved", "progress": {"answered": answered, "total": total}})
+
+@app.route("/results/<attempt_id>", methods=["GET"])
+def get_results(attempt_id):
+    # finalize and grade if not already
+    a = ATTEMPTS.get(attempt_id)
+    if not a:
+        return jsonify({"error": "attempt not found"}), 404
+
+    if a["status"] in ("in_progress", "expired"):
+        a["status"] = "submitted"
+        # grade
+        exam = EXAMS[a["exam_id"]]
+        neg = float(exam.get("negative_marking", 0.0))
+        total_marks = 0.0
+        obtained = 0.0
+        breakdown = []
+
+        for qid in a["question_ids"]:
+            q = QUESTIONS[qid]
+            total_marks += float(q["marks"])
+            chosen = a["answers"].get(qid)
+            correct_idx = a["option_map"][qid]["correct_index"]
+
+            if chosen is None:
+                score = 0.0
+                correct = False
+            else:
+                correct = (int(chosen) == int(correct_idx))
+                score = float(q["marks"]) if correct else -neg
+
+            obtained += score
+            breakdown.append({
+                "question_id": qid,
+                "text": q["text"],
+                "chosen_index": chosen,
+                "correct_index": correct_idx,
+                "marks": q["marks"],
+                "score": score,
+                "correct": correct
+            })
+
+        percent = round(max(obtained, 0.0) / total_marks * 100, 2) if total_marks > 0 else 0.0
+        RESULTS[attempt_id] = {
+            "attempt_id": attempt_id,
+            "user_id": a["user_id"],
+            "exam_id": a["exam_id"],
+            "total_marks": round(total_marks, 2),
+            "obtained": round(max(obtained, 0.0), 2),
+            "percentage": percent,
+            "breakdown": breakdown,
+            "submitted_at": now_iso()
+        }
+        save_data()
+
+    return jsonify(RESULTS[attempt_id])
+
+@app.route("/analytics/<exam_id>", methods=["GET"])
+def exam_analytics(exam_id):
+    if exam_id not in EXAMS:
+        return jsonify({"error": "exam not found"}), 404
+
+    # Aggregate item statistics: attempts, accuracy per question
+    stats = {}
+    attempts = [r for r in RESULTS.values() if r["exam_id"] == exam_id]
+    for r in attempts:
+        for b in r["breakdown"]:
+            qid = b["question_id"]
+            s = stats.setdefault(qid, {"question_id": qid, "text": b["text"], "attempts": 0, "correct": 0})
+            s["attempts"] += 1
+            s["correct"] += int(b["correct"])
+
+    # Compute accuracy
+    for qid, s in stats.items():
+        acc = (s["correct"] / s["attempts"] * 100) if s["attempts"] else 0
+        s["accuracy_percent"] = round(acc, 2)
+
+    # Overall distribution
+    percentages = [r["percentage"] for r in attempts]
+    summary = {
+        "attempts": len(attempts),
+        "avg_percentage": round(sum(percentages) / len(percentages), 2) if percentages else 0.0,
+        "min_percentage": min(percentages) if percentages else 0.0,
+        "max_percentage": max(percentages) if percentages else 0.0
+    }
+    return jsonify({"summary": summary, "item_stats": list(stats.values())})
+
+# ---------------------------
+# Run server
+# ---------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+
+
+
+curl -X POST http://localhost:8000/users \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Aarav","email":"aarav@example.com"}'
+
+
+
+curl http://localhost:8000/exams
+
+
+curl -X POST http://localhost:8000/attempt/start \
+ -H "Content-Type: application/json" \
+ -d '{"user_id":"<USER_ID>","exam_id":"<EXAM_ID>"}'
+
+
+
+curl http://localhost:8000/attempt/<ATTEMPT_ID>/next
+
+
+curl -X POST http://localhost:8000/attempt/<ATTEMPT_ID>/submit \
+ -H "Content-Type: application/json" \
+ -d '{"question_id":"<QUESTION_ID>","chosen_index":1}'
+
+
+curl -X POST http://localhost:8000/attempt/<ATTEMPT_ID>/submit \
+ -H "Content-Type: application/json" \
+ -d '{"question_id":"<QUESTION_ID>","chosen_index":1}'
+
+
+curl http://localhost:8000/results/<ATTEMPT_ID>
+
+
+curl http://localhost:8000/analytics/<EXAM_ID>
