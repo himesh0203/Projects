@@ -1,0 +1,303 @@
+Setup
+Requirements: Python 3.9+, pip install flask cryptography
+
+Run: Save as app.py, then python app.py
+
+Endpoints:
+
+POST /voter/register
+
+POST /voter/token
+
+POST /vote/cast
+
+GET /tally
+
+GET /audit
+
+
+
+# app.py
+import base64
+import hashlib
+import json
+import os
+import time
+import uuid
+from dataclasses import dataclass, asdict
+from typing import Dict, Any, List
+
+from flask import Flask, request, jsonify
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.exceptions import InvalidSignature
+
+app = Flask(__name__)
+
+# -----------------------
+# Election configuration
+# -----------------------
+ELECTION = {
+    "id": "election-2025-demo",
+    "name": "Panvel Municipal Demo Election",
+    "candidates": ["Alice", "Bharat", "Chitra", "Dhruv"],
+    "start_ts": 0,  # set on boot
+    "end_ts": 0,    # set on boot
+}
+
+# Set a 24h window by default (demo)
+now = int(time.time())
+ELECTION["start_ts"] = now
+ELECTION["end_ts"] = now + 24 * 3600
+
+# -----------------------
+# Keys (Authority)
+# -----------------------
+# Election Authority RSA keypair used to sign ballot tokens.
+EA_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+EA_PUBLIC_KEY = EA_PRIVATE_KEY.public_key()
+
+EA_PUBLIC_PEM = EA_PUBLIC_KEY.public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo
+).decode()
+
+# -----------------------
+# In-memory stores
+# -----------------------
+VOTERS: Dict[str, Dict[str, Any]] = {}     # voter_id -> {name, verified}
+TOKENS: Dict[str, Dict[str, Any]] = {}     # token_id -> {voter_id, signed_token_b64, used}
+BALLOTS: List[Dict[str, Any]] = []         # anonymous ballots
+AUDIT_LOG: List[Dict[str, Any]] = []       # append-only
+
+def audit(event: str, payload: Dict[str, Any]):
+    AUDIT_LOG.append({
+        "ts": int(time.time()),
+        "event": event,
+        "payload": payload
+    })
+
+# -----------------------
+# Helpers
+# -----------------------
+def within_window() -> bool:
+    t = int(time.time())
+    return ELECTION["start_ts"] <= t <= ELECTION["end_ts"]
+
+def sha256_hex(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+def sign_token(token_bytes: bytes) -> bytes:
+    return EA_PRIVATE_KEY.sign(
+        token_bytes,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+
+def verify_token_signature(token_bytes: bytes, signature: bytes) -> bool:
+    try:
+        EA_PUBLIC_KEY.verify(
+            signature,
+            token_bytes,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256()
+        )
+        return True
+    except InvalidSignature:
+        return False
+    except Exception:
+        return False
+
+def candidate_valid(name: str) -> bool:
+    return name in ELECTION["candidates"]
+
+# -----------------------
+# API
+# -----------------------
+
+@app.route("/election", methods=["GET"])
+def election_info():
+    return jsonify({
+        "id": ELECTION["id"],
+        "name": ELECTION["name"],
+        "candidates": ELECTION["candidates"],
+        "start_ts": ELECTION["start_ts"],
+        "end_ts": ELECTION["end_ts"],
+        "authority_public_key_pem": EA_PUBLIC_PEM
+    })
+
+@app.route("/voter/register", methods=["POST"])
+def voter_register():
+    payload = request.get_json(force=True)
+    name = payload.get("name")
+    government_id = payload.get("government_id")  # demo: simple string
+
+    if not name or not government_id:
+        return jsonify({"error": "name and government_id required"}), 400
+
+    # Derive a stable voter_id for demo (hash of govt id)
+    voter_id = sha256_hex(government_id.encode())[:16]
+
+    if voter_id in VOTERS:
+        return jsonify({"message": "already_registered", "voter_id": voter_id})
+
+    VOTERS[voter_id] = {"name": name, "verified": True, "registered_ts": int(time.time())}
+    audit("voter_registered", {"voter_id": voter_id})
+    return jsonify({"voter_id": voter_id, "verified": True})
+
+@app.route("/voter/token", methods=["POST"])
+def issue_token():
+    if not within_window():
+        return jsonify({"error": "Election not active"}), 400
+
+    payload = request.get_json(force=True)
+    voter_id = payload.get("voter_id")
+
+    if voter_id not in VOTERS or not VOTERS[voter_id]["verified"]:
+        return jsonify({"error": "Voter not verified"}), 403
+
+    # Ensure voter has not already been issued a used token
+    for t_id, t in TOKENS.items():
+        if t["voter_id"] == voter_id and t["used"]:
+            return jsonify({"error": "Vote already cast"}), 403
+
+    # Allow one active token per voter at a time
+    for t_id, t in TOKENS.items():
+        if t["voter_id"] == voter_id and not t["used"]:
+            return jsonify({"token_id": t_id, "signed_token_b64": t["signed_token_b64"]})
+
+    # Create a fresh token
+    token_id = str(uuid.uuid4())
+    token_struct = {
+        "election_id": ELECTION["id"],
+        "token_id": token_id,
+        "issued_for": voter_id,
+        "issued_ts": int(time.time())
+    }
+    token_bytes = json.dumps(token_struct, sort_keys=True).encode()
+    signature = sign_token(token_bytes)
+
+    token_record = {
+        "voter_id": voter_id,
+        "signed_token_b64": base64.b64encode(signature).decode(),
+        "token_bytes_b64": base64.b64encode(token_bytes).decode(),
+        "used": False
+    }
+    TOKENS[token_id] = token_record
+    audit("token_issued", {"token_id": token_id, "voter_id": voter_id})
+
+    return jsonify({
+        "token_id": token_id,
+        "signed_token_b64": token_record["signed_token_b64"],
+        "token_bytes_b64": token_record["token_bytes_b64"]
+    })
+
+@app.route("/vote/cast", methods=["POST"])
+def cast_vote():
+    if not within_window():
+        return jsonify({"error": "Election not active"}), 400
+
+    payload = request.get_json(force=True)
+    token_id = payload.get("token_id")
+    token_b64 = payload.get("token_bytes_b64")
+    sig_b64 = payload.get("signed_token_b64")
+    candidate = payload.get("candidate")
+
+    if not token_id or not token_b64 or not sig_b64 or not candidate:
+        return jsonify({"error": "Missing fields"}), 400
+    if not candidate_valid(candidate):
+        return jsonify({"error": "Unknown candidate"}), 400
+    if token_id not in TOKENS:
+        return jsonify({"error": "Invalid token"}), 403
+
+    record = TOKENS[token_id]
+    if record["used"]:
+        return jsonify({"error": "Token already used"}), 403
+
+    # Validate signature and token content
+    try:
+        token_bytes = base64.b64decode(token_b64)
+        signature = base64.b64decode(sig_b64)
+    except Exception:
+        return jsonify({"error": "Invalid base64"}), 400
+
+    # Signature must match authority and token bytes
+    if not verify_token_signature(token_bytes, signature):
+        return jsonify({"error": "Invalid token signature"}), 403
+
+    # Token content must match issued token
+    if token_b64 != record["token_bytes_b64"] or sig_b64 != record["signed_token_b64"]:
+        return jsonify({"error": "Token mismatch"}), 403
+
+    # Burn token (prevent double-voting)
+    record["used"] = True
+
+    # Anonymous ballot: store only election_id, candidate, token hash
+    ballot = {
+        "election_id": ELECTION["id"],
+        "candidate": candidate,
+        "ballot_ts": int(time.time()),
+        "token_fingerprint": sha256_hex(token_bytes)  # traceable in audit but unlinkable to voter_id
+    }
+    BALLOTS.append(ballot)
+    audit("vote_cast", {"token_id": token_id, "fingerprint": ballot["token_fingerprint"]})
+
+    return jsonify({"status": "accepted"})
+
+@app.route("/tally", methods=["GET"])
+def tally():
+    # Deterministic count for current election
+    counts = {c: 0 for c in ELECTION["candidates"]}
+    for b in BALLOTS:
+        if b["election_id"] == ELECTION["id"]:
+            counts[b["candidate"]] += 1
+
+    # Basic integrity checks
+    used_tokens = sum(1 for t in TOKENS.values() if t["used"])
+    if used_tokens != sum(counts.values()):
+        integrity = "warning: mismatch between used tokens and ballots"
+    else:
+        integrity = "ok"
+
+    return jsonify({
+        "election_id": ELECTION["id"],
+        "counts": counts,
+        "ballots_total": sum(counts.values()),
+        "used_tokens": used_tokens,
+        "integrity": integrity
+    })
+
+@app.route("/audit", methods=["GET"])
+def audit_log():
+    return jsonify({"events": AUDIT_LOG})
+
+# -----------------------
+# Run server
+# -----------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+
+
+curl -X POST http://localhost:8000/voter/register \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Riya","government_id":"PANVEL-12345"}'
+
+
+
+curl -X POST http://localhost:8000/voter/token \
+ -H "Content-Type: application/json" \
+ -d '{"voter_id":"<VOTER_ID_FROM_REGISTER>"}'
+
+
+curl -X POST http://localhost:8000/vote/cast \
+ -H "Content-Type: application/json" \
+ -d '{"token_id":"<TOKEN_ID>","token_bytes_b64":"<TOKEN_B64>","signed_token_b64":"<SIG_B64>","candidate":"Alice"}'
+
+
+
+curl http://localhost:8000/tally
+
+
+curl http://localhost:8000/audit
