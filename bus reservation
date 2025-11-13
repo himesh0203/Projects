@@ -1,0 +1,118 @@
+# bus_reservation.py
+
+import datetime
+
+class Bus:
+    def __init__(self, bus_id, source, destination, total_seats):
+        self.bus_id = bus_id
+        self.source = source
+        self.destination = destination
+        self.total_seats = total_seats
+        self.available_seats = total_seats
+        self.passengers = []
+
+    def show_info(self):
+        print(f"Bus ID: {self.bus_id}")
+        print(f"Route: {self.source} -> {self.destination}")
+        print(f"Total Seats: {self.total_seats}")
+        print(f"Available Seats: {self.available_seats}")
+        print("-" * 30)
+
+    def reserve_seat(self, passenger_name):
+        if self.available_seats > 0:
+            self.passengers.append({
+                "name": passenger_name,
+                "seat_no": self.total_seats - self.available_seats + 1,
+                "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            self.available_seats -= 1
+            print(f"✅ Seat reserved for {passenger_name} on Bus {self.bus_id}.")
+        else:
+            print("❌ No seats available on this bus.")
+
+    def show_passengers(self):
+        if not self.passengers:
+            print("No reservations yet.")
+        else:
+            print(f"Passengers on Bus {self.bus_id}:")
+            for p in self.passengers:
+                print(f"Seat {p['seat_no']}: {p['name']} (Booked at {p['time']})")
+
+
+class ReservationSystem:
+    def __init__(self):
+        self.buses = {}
+
+    def add_bus(self, bus_id, source, destination, total_seats):
+        if bus_id in self.buses:
+            print("Bus ID already exists.")
+        else:
+            self.buses[bus_id] = Bus(bus_id, source, destination, total_seats)
+            print(f"🚌 Bus {bus_id} added successfully.")
+
+    def show_all_buses(self):
+        if not self.buses:
+            print("No buses available.")
+        else:
+            for bus in self.buses.values():
+                bus.show_info()
+
+    def reserve_ticket(self, bus_id, passenger_name):
+        if bus_id not in self.buses:
+            print("Invalid Bus ID.")
+        else:
+            self.buses[bus_id].reserve_seat(passenger_name)
+
+    def show_passengers(self, bus_id):
+        if bus_id not in self.buses:
+            print("Invalid Bus ID.")
+        else:
+            self.buses[bus_id].show_passengers()
+
+
+# ------------------ MAIN PROGRAM ------------------
+
+def main():
+    system = ReservationSystem()
+
+    while True:
+        print("\n=== Bus Reservation System ===")
+        print("1. Add Bus")
+        print("2. Show All Buses")
+        print("3. Reserve Ticket")
+        print("4. Show Passengers")
+        print("5. Exit")
+
+        choice = input("Enter choice: ")
+
+        if choice == "1":
+            bus_id = input("Enter Bus ID: ")
+            source = input("Enter Source: ")
+            destination = input("Enter Destination: ")
+            seats = int(input("Enter Total Seats: "))
+            system.add_bus(bus_id, source, destination, seats)
+
+        elif choice == "2":
+            system.show_all_buses()
+
+        elif choice == "3":
+            bus_id = input("Enter Bus ID: ")
+            name = input("Enter Passenger Name: ")
+            system.reserve_ticket(bus_id, name)
+
+        elif choice == "4":
+            bus_id = input("Enter Bus ID: ")
+            system.show_passengers(bus_id)
+
+        elif choice == "5":
+            print("Exiting system. Goodbye!")
+            break
+
+        else:
+            print("Invalid choice. Try again.")
+
+
+if __name__ == "__main__":
+    main()
+
+
