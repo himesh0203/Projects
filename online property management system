@@ -1,0 +1,441 @@
+Setup
+Requirements: Python 3.9+, pip install flask
+
+Run: Save as app.py, then python app.py
+
+Key endpoints:
+
+POST /properties, GET /properties
+
+POST /units, GET /units/<unit_id>
+
+POST /tenants, GET /tenants/<tenant_id>
+
+POST /leases, GET /leases/<lease_id>
+
+POST /payments, GET /ledger/<tenant_id>
+
+POST /maintenance, PATCH /maintenance/<req_id>, GET /maintenance/open
+
+POST /invoices/generate, GET /invoices/<tenant_id>
+
+GET /reports/occupancy
+
+
+
+# app.py
+import json
+import uuid
+from datetime import datetime, date, timedelta
+from typing import Dict, Any, List
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+DATA_FILE = "pms_data.json"
+
+PROPERTIES: Dict[str, Dict[str, Any]] = {}
+UNITS: Dict[str, Dict[str, Any]] = {}
+TENANTS: Dict[str, Dict[str, Any]] = {}
+LEASES: Dict[str, Dict[str, Any]] = {}
+PAYMENTS: List[Dict[str, Any]] = []
+INVOICES: List[Dict[str, Any]] = []
+MAINTENANCE: List[Dict[str, Any]] = []
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({
+            "PROPERTIES": PROPERTIES,
+            "UNITS": UNITS,
+            "TENANTS": TENANTS,
+            "LEASES": LEASES,
+            "PAYMENTS": PAYMENTS,
+            "INVOICES": INVOICES,
+            "MAINTENANCE": MAINTENANCE
+        }, f, indent=2, default=str)
+
+def load_data():
+    global PROPERTIES, UNITS, TENANTS, LEASES, PAYMENTS, INVOICES, MAINTENANCE
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            PROPERTIES = data.get("PROPERTIES", {})
+            UNITS = data.get("UNITS", {})
+            TENANTS = data.get("TENANTS", {})
+            LEASES = data.get("LEASES", {})
+            PAYMENTS = data.get("PAYMENTS", [])
+            INVOICES = data.get("INVOICES", [])
+            MAINTENANCE = data.get("MAINTENANCE", [])
+    except FileNotFoundError:
+        pass
+
+load_data()
+
+# ---------------------------
+# Helpers
+# ---------------------------
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:10]}"
+
+def parse_date(s: str) -> date:
+    return datetime.strptime(s, "%Y-%m-%d").date()
+
+def today() -> date:
+    return datetime.utcnow().date()
+
+def lease_active(lease: Dict[str, Any], on: date) -> bool:
+    start = parse_date(lease["start_date"])
+    end = parse_date(lease["end_date"])
+    return start <= on <= end
+
+def unit_occupied(unit_id: str, on: date) -> bool:
+    for lease in LEASES.values():
+        if lease["unit_id"] == unit_id and lease_active(lease, on):
+            return True
+    return False
+
+def tenant_leases(tenant_id: str) -> List[Dict[str, Any]]:
+    return [l for l in LEASES.values() if l["tenant_id"] == tenant_id]
+
+def current_lease_for_unit(unit_id: str) -> Dict[str, Any] | None:
+    now = today()
+    for l in LEASES.values():
+        if l["unit_id"] == unit_id and lease_active(l, now):
+            return l
+    return None
+
+def monthly_due_dates(start: date, end: date, due_day: int) -> List[date]:
+    dates = []
+    cursor = date(start.year, start.month, 1)
+    while cursor <= end:
+        d = date(cursor.year, cursor.month, min(due_day, 28))  # keep simple for months
+        if start <= d <= end:
+            dates.append(d)
+        # next month
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    return dates
+
+def outstanding_balance(tenant_id: str) -> float:
+    # sum invoices minus payments for active leases
+    inv_total = sum(i["amount"] for i in INVOICES if i["tenant_id"] == tenant_id and i["status"] != "void")
+    pay_total = sum(p["amount"] for p in PAYMENTS if p["tenant_id"] == tenant_id)
+    return round(inv_total - pay_total, 2)
+
+def generate_invoice(lease: Dict[str, Any], due_date: date) -> Dict[str, Any]:
+    rent = float(lease["rent_amount"])
+    inv = {
+        "id": new_id("inv"),
+        "tenant_id": lease["tenant_id"],
+        "unit_id": lease["unit_id"],
+        "lease_id": lease["id"],
+        "due_date": due_date.isoformat(),
+        "amount": rent,
+        "status": "open",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    INVOICES.append(inv)
+    return inv
+
+def apply_late_fees(today_d: date, late_fee: float = 100.0):
+    for inv in INVOICES:
+        if inv["status"] == "open":
+            due = parse_date(inv["due_date"])
+            if today_d > due + timedelta(days=5):  # 5-day grace
+                inv["amount"] = round(inv["amount"] + late_fee, 2)
+
+# ---------------------------
+# Seed demo
+# ---------------------------
+if not PROPERTIES:
+    pid = new_id("prop")
+    PROPERTIES[pid] = {
+        "id": pid, "name": "Green Heights", "address": "Sector 12, Panvel",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    for num in ["A-101", "A-102", "B-201"]:
+        uid = new_id("unit")
+        UNITS[uid] = {
+            "id": uid, "property_id": pid, "number": num,
+            "beds": 2, "baths": 2, "area_sqft": 950, "rent": 18000, "status": "vacant",
+            "created_at": datetime.utcnow().isoformat()
+        }
+    save_data()
+
+# ---------------------------
+# API endpoints
+# ---------------------------
+
+@app.route("/properties", methods=["POST"])
+def create_property():
+    payload = request.get_json(force=True)
+    prop_id = new_id("prop")
+    prop = {
+        "id": prop_id,
+        "name": payload.get("name", "Property"),
+        "address": payload.get("address", ""),
+        "created_at": datetime.utcnow().isoformat()
+    }
+    PROPERTIES[prop_id] = prop
+    save_data()
+    return jsonify(prop), 201
+
+@app.route("/properties", methods=["GET"])
+def list_properties():
+    return jsonify({"properties": list(PROPERTIES.values())})
+
+@app.route("/units", methods=["POST"])
+def create_unit():
+    payload = request.get_json(force=True)
+    property_id = payload.get("property_id")
+    if property_id not in PROPERTIES:
+        return jsonify({"error": "property not found"}), 404
+    unit_id = new_id("unit")
+    unit = {
+        "id": unit_id,
+        "property_id": property_id,
+        "number": payload.get("number", "Unit"),
+        "beds": int(payload.get("beds", 2)),
+        "baths": int(payload.get("baths", 1)),
+        "area_sqft": int(payload.get("area_sqft", 800)),
+        "rent": float(payload.get("rent", 12000)),
+        "status": "vacant",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    UNITS[unit_id] = unit
+    save_data()
+    return jsonify(unit), 201
+
+@app.route("/units/<unit_id>", methods=["GET"])
+def get_unit(unit_id):
+    u = UNITS.get(unit_id)
+    if not u:
+        return jsonify({"error": "unit not found"}), 404
+    current = current_lease_for_unit(unit_id)
+    return jsonify({"unit": u, "current_lease": current})
+
+@app.route("/tenants", methods=["POST"])
+def create_tenant():
+    payload = request.get_json(force=True)
+    tenant_id = new_id("tenant")
+    tenant = {
+        "id": tenant_id,
+        "name": payload.get("name", "Tenant"),
+        "email": payload.get("email", ""),
+        "phone": payload.get("phone", ""),
+        "created_at": datetime.utcnow().isoformat()
+    }
+    TENANTS[tenant_id] = tenant
+    save_data()
+    return jsonify(tenant), 201
+
+@app.route("/tenants/<tenant_id>", methods=["GET"])
+def get_tenant(tenant_id):
+    t = TENANTS.get(tenant_id)
+    if not t:
+        return jsonify({"error": "tenant not found"}), 404
+    return jsonify(t)
+
+@app.route("/leases", methods=["POST"])
+def create_lease():
+    payload = request.get_json(force=True)
+    unit_id = payload.get("unit_id")
+    tenant_id = payload.get("tenant_id")
+    if unit_id not in UNITS or tenant_id not in TENANTS:
+        return jsonify({"error": "unit or tenant not found"}), 404
+    if unit_occupied(unit_id, today()):
+        return jsonify({"error": "unit already occupied"}), 400
+
+    lease_id = new_id("lease")
+    lease = {
+        "id": lease_id,
+        "unit_id": unit_id,
+        "tenant_id": tenant_id,
+        "start_date": payload.get("start_date"),  # YYYY-MM-DD
+        "end_date": payload.get("end_date"),
+        "rent_amount": float(payload.get("rent_amount", UNITS[unit_id]["rent"])),
+        "due_day": int(payload.get("due_day", 5)),
+        "deposit": float(payload.get("deposit", 0)),
+        "created_at": datetime.utcnow().isoformat()
+    }
+    LEASES[lease_id] = lease
+    UNITS[unit_id]["status"] = "occupied"
+    save_data()
+    return jsonify(lease), 201
+
+@app.route("/leases/<lease_id>", methods=["GET"])
+def get_lease(lease_id):
+    l = LEASES.get(lease_id)
+    if not l:
+        return jsonify({"error": "lease not found"}), 404
+    return jsonify(l)
+
+@app.route("/payments", methods=["POST"])
+def record_payment():
+    payload = request.get_json(force=True)
+    tenant_id = payload.get("tenant_id")
+    amount = float(payload.get("amount", 0))
+    method = payload.get("method", "bank_transfer")
+    notes = payload.get("notes", "")
+    if tenant_id not in TENANTS:
+        return jsonify({"error": "tenant not found"}), 404
+
+    payment = {
+        "id": new_id("pay"),
+        "tenant_id": tenant_id,
+        "amount": amount,
+        "method": method,
+        "notes": notes,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    PAYMENTS.append(payment)
+
+    # Auto-close oldest open invoice(s)
+    remaining = amount
+    for inv in sorted([i for i in INVOICES if i["tenant_id"] == tenant_id and i["status"] == "open"], key=lambda x: x["due_date"]):
+        if remaining <= 0:
+            break
+        if remaining >= inv["amount"]:
+            remaining -= inv["amount"]
+            inv["status"] = "paid"
+        else:
+            inv["amount"] = round(inv["amount"] - remaining, 2)
+            remaining = 0
+
+    save_data()
+    return jsonify({"payment": payment, "outstanding_balance": outstanding_balance(tenant_id)}), 201
+
+@app.route("/ledger/<tenant_id>", methods=["GET"])
+def ledger(tenant_id):
+    if tenant_id not in TENANTS:
+        return jsonify({"error": "tenant not found"}), 404
+    invs = [i for i in INVOICES if i["tenant_id"] == tenant_id]
+    pays = [p for p in PAYMENTS if p["tenant_id"] == tenant_id]
+    return jsonify({"invoices": invs, "payments": pays, "outstanding_balance": outstanding_balance(tenant_id)})
+
+@app.route("/invoices/generate", methods=["POST"])
+def generate_invoices():
+    payload = request.get_json(force=True)
+    run_date = parse_date(payload.get("run_date", today().isoformat()))
+    created = []
+    # apply late fees first
+    apply_late_fees(run_date)
+
+    for lease in LEASES.values():
+        if lease_active(lease, run_date):
+            start = parse_date(lease["start_date"])
+            end = parse_date(lease["end_date"])
+            dues = monthly_due_dates(start, end, lease.get("due_day", 5))
+            # If an invoice for a due date doesn't exist, create it
+            for d in dues:
+                exists = any(i for i in INVOICES if i["lease_id"] == lease["id"] and i["due_date"] == d.isoformat())
+                if not exists and d <= run_date:
+                    inv = generate_invoice(lease, d)
+                    created.append(inv["id"])
+    save_data()
+    return jsonify({"created_invoices": created, "run_date": run_date.isoformat()})
+
+@app.route("/invoices/<tenant_id>", methods=["GET"])
+def invoices_for_tenant(tenant_id):
+    if tenant_id not in TENANTS:
+        return jsonify({"error": "tenant not found"}), 404
+    invs = [i for i in INVOICES if i["tenant_id"] == tenant_id]
+    return jsonify({"invoices": invs})
+
+@app.route("/maintenance", methods=["POST"])
+def create_maintenance():
+    payload = request.get_json(force=True)
+    unit_id = payload.get("unit_id")
+    tenant_id = payload.get("tenant_id")
+    if unit_id not in UNITS:
+        return jsonify({"error": "unit not found"}), 404
+    if tenant_id and tenant_id not in TENANTS:
+        return jsonify({"error": "tenant not found"}), 404
+    req_id = new_id("mnt")
+    req = {
+        "id": req_id,
+        "unit_id": unit_id,
+        "tenant_id": tenant_id,
+        "title": payload.get("title", "Issue"),
+        "description": payload.get("description", ""),
+        "priority": payload.get("priority", "medium"),
+        "status": "open",
+        "created_at": datetime.utcnow().isoformat(),
+        "updates": []
+    }
+    MAINTENANCE.append(req)
+    save_data()
+    return jsonify(req), 201
+
+@app.route("/maintenance/<req_id>", methods=["PATCH"])
+def update_maintenance(req_id):
+    payload = request.get_json(force=True)
+    req = next((r for r in MAINTENANCE if r["id"] == req_id), None)
+    if not req:
+        return jsonify({"error": "maintenance request not found"}), 404
+    if "status" in payload:
+        req["status"] = payload["status"]
+    if "note" in payload:
+        req["updates"].append({"note": payload["note"], "timestamp": datetime.utcnow().isoformat()})
+    save_data()
+    return jsonify(req)
+
+@app.route("/maintenance/open", methods=["GET"])
+def list_open_maintenance():
+    open_reqs = [r for r in MAINTENANCE if r["status"] != "closed"]
+    return jsonify({"maintenance": open_reqs})
+
+@app.route("/reports/occupancy", methods=["GET"])
+def report_occupancy():
+    today_d = today()
+    props = {}
+    for pid, prop in PROPERTIES.items():
+        units = [u for u in UNITS.values() if u["property_id"] == pid]
+        occ = sum(1 for u in units if unit_occupied(u["id"], today_d))
+        total = len(units)
+        rate = round(occ / total * 100, 2) if total else 0
+        props[pid] = {"property": prop, "units_total": total, "units_occupied": occ, "occupancy_percent": rate}
+    return jsonify({"occupancy": props})
+
+# ---------------------------
+# Run server
+# ---------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+
+curl -X POST http://localhost:8000/tenants \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Aarav","email":"aarav@example.com","phone":"+91-9000000000"}'
+
+
+curl -X POST http://localhost:8000/leases \
+ -H "Content-Type: application/json" \
+ -d '{"unit_id":"<UNIT_ID>","tenant_id":"<TENANT_ID>","start_date":"2025-11-01","end_date":"2026-10-31","rent_amount":18000,"due_day":5,"deposit":20000}'
+
+
+curl -X POST http://localhost:8000/invoices/generate \
+ -H "Content-Type: application/json" \
+ -d '{"run_date":"2025-11-13"}'
+
+
+curl -X POST http://localhost:8000/payments \
+ -H "Content-Type: application/json" \
+ -d '{"tenant_id":"<TENANT_ID>","amount":18000,"method":"upi","notes":"Nov rent"}'
+
+
+curl -X POST http://localhost:8000/maintenance \
+ -H "Content-Type: application/json" \
+ -d '{"unit_id":"<UNIT_ID>","tenant_id":"<TENANT_ID>","title":"Leaky faucet","description":"Kitchen sink leaking","priority":"high"}'
+
+
+curl -X PATCH http://localhost:8000/maintenance/<REQ_ID> \
+ -H "Content-Type: application/json" \
+ -d '{"status":"in_progress","note":"Plumber scheduled for 14 Nov"}'
+
+
+curl http://localhost:8000/reports/occupancy
+
