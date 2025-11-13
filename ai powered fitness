@@ -1,0 +1,339 @@
+Setup
+Requirements: Python 3.9+, pip install flask numpy scikit-learn
+
+Run: Save as app.py, then python app.py
+
+Use: Try endpoints with curl or Postman:
+
+POST /users
+
+GET /plan/<user_id>
+
+POST /log/<user_id>
+
+GET /progress/<user_id>
+
+
+
+curl -X POST http://localhost:8000/users \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Aarav","age":28,"gender":"male","fitness_level":"beginner","goals":{"weight_loss":0.8,"endurance":0.6,"strength":0.3},"equipment":["none","dumbbells"],"injuries":["knee"]}'
+
+
+
+curl http://localhost:8000/plan/<user_id>
+
+
+curl -X POST http://localhost:8000/log/<user_id> \
+ -H "Content-Type: application/json" \
+ -d '{"workout_id":"w2","perceived_exertion":5,"enjoyment":8,"notes":"Felt good"}'
+
+
+
+curl http://localhost:8000/progress/<user_id>
+
+
+
+
+# app.py
+import json
+import uuid
+from datetime import datetime
+from typing import List, Dict, Any
+from flask import Flask, request, jsonify
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+app = Flask(__name__)
+
+# --- Simple storage (replace with a database in production) ---
+USERS: Dict[str, Dict[str, Any]] = {}
+LOGS: Dict[str, List[Dict[str, Any]]] = {}
+
+DATA_FILE = "fitness_data.json"
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({"USERS": USERS, "LOGS": LOGS}, f, indent=2, default=str)
+
+def load_data():
+    global USERS, LOGS
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            USERS = data.get("USERS", {})
+            LOGS = data.get("LOGS", {})
+    except FileNotFoundError:
+        USERS, LOGS = {}, {}
+
+load_data()
+
+# --- Catalog of exercises with attributes for simple AI matching ---
+WORKOUT_CATALOG = [
+    # Attributes: goals vector [strength, hypertrophy, endurance, mobility, weight_loss]
+    # Difficulty: 1-5, Impact: low/medium/high, Equipment tags
+    {
+        "id": "w1",
+        "name": "Full-body strength circuit",
+        "goals": [1.0, 0.7, 0.4, 0.2, 0.6],
+        "difficulty": 3,
+        "impact": "medium",
+        "equipment": ["dumbbells"],
+        "duration_min": 40,
+        "exercises": [
+            {"move": "Goblet squat", "sets": 4, "reps": 10},
+            {"move": "Push-up", "sets": 4, "reps": 10},
+            {"move": "Bent-over row", "sets": 4, "reps": 10},
+            {"move": "Plank", "sets": 3, "time_sec": 45},
+        ]
+    },
+    {
+        "id": "w2",
+        "name": "Low-impact cardio and mobility",
+        "goals": [0.2, 0.2, 1.0, 0.8, 0.7],
+        "difficulty": 2,
+        "impact": "low",
+        "equipment": ["none"],
+        "duration_min": 30,
+        "exercises": [
+            {"move": "Brisk walk", "time_min": 20},
+            {"move": "Hip openers", "time_min": 5},
+            {"move": "Thoracic rotations", "time_min": 5},
+        ]
+    },
+    {
+        "id": "w3",
+        "name": "Hypertrophy upper-body split",
+        "goals": [0.6, 1.0, 0.3, 0.2, 0.5],
+        "difficulty": 4,
+        "impact": "medium",
+        "equipment": ["barbell", "dumbbells"],
+        "duration_min": 50,
+        "exercises": [
+            {"move": "Bench press", "sets": 5, "reps": 8},
+            {"move": "Lat pulldown", "sets": 4, "reps": 10},
+            {"move": "Shoulder press", "sets": 4, "reps": 10},
+            {"move": "Curls", "sets": 3, "reps": 12},
+        ]
+    },
+    {
+        "id": "w4",
+        "name": "Bodyweight strength and core",
+        "goals": [0.9, 0.6, 0.4, 0.3, 0.5],
+        "difficulty": 3,
+        "impact": "low",
+        "equipment": ["none"],
+        "duration_min": 35,
+        "exercises": [
+            {"move": "Split squat", "sets": 4, "reps": 10},
+            {"move": "Inverted row (table)", "sets": 4, "reps": 10},
+            {"move": "Hollow hold", "sets": 3, "time_sec": 40},
+        ]
+    },
+    {
+        "id": "w5",
+        "name": "Interval running session",
+        "goals": [0.3, 0.2, 0.9, 0.2, 0.8],
+        "difficulty": 4,
+        "impact": "high",
+        "equipment": ["none"],
+        "duration_min": 35,
+        "exercises": [
+            {"move": "Warm-up jog", "time_min": 10},
+            {"move": "Intervals 6x (fast 1 min, easy 1.5 min)", "time_min": 15},
+            {"move": "Cool-down walk", "time_min": 10},
+        ]
+    },
+]
+
+GOAL_INDEX = {
+    "strength": 0,
+    "hypertrophy": 1,
+    "endurance": 2,
+    "mobility": 3,
+    "weight_loss": 4,
+}
+
+IMPACT_SAFE_FOR_INJURIES = {
+    "knee": {"allow": ["low"], "avoid": ["high"]},
+    "back": {"allow": ["low", "medium"], "avoid": ["high"]},
+    "ankle": {"allow": ["low"], "avoid": ["high"]},
+}
+
+# --- Utility functions ---
+def normalize_goals(goals: Dict[str, float]) -> np.ndarray:
+    vec = np.zeros(len(GOAL_INDEX))
+    for k, v in goals.items():
+        if k in GOAL_INDEX:
+            vec[GOAL_INDEX[k]] = float(v)
+    if np.linalg.norm(vec) == 0:
+        return np.ones(len(GOAL_INDEX)) / len(GOAL_INDEX)
+    return vec / (np.linalg.norm(vec) + 1e-8)
+
+def user_equipment_set(equipment_list: List[str]) -> set:
+    return set([e.strip().lower() for e in equipment_list or []])
+
+def impact_allowed(impact: str, injuries: List[str]) -> bool:
+    if not injuries:
+        return True
+    for inj in injuries:
+        rule = IMPACT_SAFE_FOR_INJURIES.get(inj.lower())
+        if rule and impact in rule.get("avoid", []):
+            return False
+    return True
+
+def difficulty_target(level: str) -> int:
+    mapping = {"beginner": 2, "intermediate": 3, "advanced": 4}
+    return mapping.get(level.lower(), 2)
+
+def adaptive_goal_boost(user_id: str) -> np.ndarray:
+    # Adjust user goal vector based on past logs using perceived exertion and enjoyment
+    logs = LOGS.get(user_id, [])
+    if not logs:
+        return np.zeros(len(GOAL_INDEX))
+    # Simple heuristic: if enjoyment high on endurance workouts, boost endurance weight, etc.
+    boost = np.zeros(len(GOAL_INDEX))
+    for entry in logs[-10:]:  # last 10 sessions
+        gid = entry.get("dominant_goal")
+        enjoy = entry.get("enjoyment", 5)  # 1-10
+        if gid in GOAL_INDEX:
+            idx = GOAL_INDEX[gid]
+            boost[idx] += (enjoy - 5) * 0.02  # small nudge
+    return boost
+
+def dominant_goal_from_workout(workout: Dict[str, Any]) -> str:
+    goals = np.array(workout["goals"])
+    return list(GOAL_INDEX.keys())[int(np.argmax(goals))]
+
+def rank_workouts_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]:
+    # Build user goal vector
+    base_goals = normalize_goals(user.get("goals", {}))
+    adapt = adaptive_goal_boost(user["id"])
+    user_vec = np.clip(base_goals + adapt, 0, 1)
+    user_vec = user_vec / (np.linalg.norm(user_vec) + 1e-8)
+
+    # Filters
+    eq_set = user_equipment_set(user.get("equipment", []))
+    target_diff = difficulty_target(user.get("fitness_level", "beginner"))
+    injuries = user.get("injuries", [])
+
+    # Score each workout
+    scored = []
+    for w in WORKOUT_CATALOG:
+        # Equipment feasibility: allow if user has all required equipment OR workout uses "none"
+        requires = set([e.lower() for e in w.get("equipment", [])])
+        eq_ok = (requires == {"none"}) or (requires.issubset(eq_set))
+        impact_ok = impact_allowed(w["impact"], injuries)
+        # Difficulty penalty if too far from target
+        diff_gap = abs(w["difficulty"] - target_diff)
+        diff_penalty = 1.0 - min(diff_gap * 0.2, 0.6)  # cap penalty
+        # Similarity on goals
+        sim = float(cosine_similarity([user_vec], [np.array(w["goals"])])[0][0])
+        # Final score
+        feasible = eq_ok and impact_ok
+        score = (sim * 0.7 + diff_penalty * 0.3) * (1.0 if feasible else 0.4)
+        scored.append({"workout": w, "score": score, "feasible": feasible})
+
+    # Sort by score desc, prefer feasible
+    scored.sort(key=lambda x: (x["feasible"], x["score"]), reverse=True)
+    return [x["workout"] for x in scored]
+
+# --- API endpoints ---
+
+@app.route("/users", methods=["POST"])
+def create_user():
+    payload = request.get_json(force=True)
+    user_id = str(uuid.uuid4())
+    user = {
+        "id": user_id,
+        "name": payload.get("name"),
+        "age": int(payload.get("age", 0)),
+        "gender": payload.get("gender", "unspecified"),
+        "fitness_level": payload.get("fitness_level", "beginner"),
+        "goals": payload.get("goals", {"weight_loss": 0.7, "endurance": 0.6}),
+        "equipment": payload.get("equipment", ["none"]),
+        "injuries": payload.get("injuries", []),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    USERS[user_id] = user
+    LOGS[user_id] = []
+    save_data()
+    return jsonify({"user_id": user_id, "user": user})
+
+@app.route("/plan/<user_id>", methods=["GET"])
+def get_plan(user_id):
+    user = USERS.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    ranked = rank_workouts_for_user(user)
+    # Return top 3 with a weekly structure suggestion
+    plan = {
+        "user_id": user_id,
+        "weekly_schedule": [
+            {"day": "Day 1", "workout": ranked[0]},
+            {"day": "Day 3", "workout": ranked[1] if len(ranked) > 1 else ranked[0]},
+            {"day": "Day 5", "workout": ranked[2] if len(ranked) > 2 else ranked[0]},
+        ],
+        "notes": "Space sessions for recovery (e.g., Mon/Wed/Fri). Start conservatively and adjust based on how you feel."
+    }
+    return jsonify(plan)
+
+@app.route("/log/<user_id>", methods=["POST"])
+def log_session(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "User not found"}), 404
+    payload = request.get_json(force=True)
+    workout_id = payload.get("workout_id")
+    workout = next((w for w in WORKOUT_CATALOG if w["id"] == workout_id), None)
+    if not workout:
+        return jsonify({"error": "Workout not found"}), 404
+
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "workout_id": workout_id,
+        "duration_min": payload.get("duration_min", workout.get("duration_min")),
+        "perceived_exertion": int(payload.get("perceived_exertion", 6)),  # 1-10
+        "enjoyment": int(payload.get("enjoyment", 6)),  # 1-10
+        "notes": payload.get("notes", ""),
+        "dominant_goal": dominant_goal_from_workout(workout),
+    }
+    LOGS[user_id].append(entry)
+    save_data()
+    return jsonify({"status": "logged", "entry": entry})
+
+@app.route("/progress/<user_id>", methods=["GET"])
+def get_progress(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "User not found"}), 404
+    logs = LOGS.get(user_id, [])
+    if not logs:
+        return jsonify({"message": "No sessions logged yet.", "sessions": 0})
+
+    # Simple trends: average exertion and enjoyment over time
+    ex = np.array([l["perceived_exertion"] for l in logs])
+    en = np.array([l["enjoyment"] for l in logs])
+    trend = {
+        "sessions": len(logs),
+        "avg_exertion": round(float(ex.mean()), 2),
+        "avg_enjoyment": round(float(en.mean()), 2),
+        "recent_focus": dominant_goal_from_workout(
+            next((w for w in WORKOUT_CATALOG if w["id"] == logs[-1]["workout_id"]), WORKOUT_CATALOG[0])
+        ),
+        "suggestion": "If exertion is consistently high and enjoyment low, consider reducing difficulty or adding mobility days."
+    }
+    return jsonify(trend)
+
+@app.route("/catalog", methods=["GET"])
+def get_catalog():
+    return jsonify({"workouts": WORKOUT_CATALOG})
+
+@app.route("/users/<user_id>", methods=["GET"])
+def get_user(user_id):
+    user = USERS.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user)
+
+# --- Run server ---
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
