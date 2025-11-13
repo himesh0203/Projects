@@ -1,0 +1,363 @@
+Setup
+Requirements: Python 3.9+, pip install flask
+
+Run: Save as app.py, then python app.py
+
+Key endpoints:
+
+POST /courses, GET /courses
+
+POST /users, GET /users/<user_id>
+
+POST /enroll, GET /enrollments/<user_id>
+
+GET /course/<course_id>, GET /lesson/<lesson_id>
+
+POST /progress/<user_id>
+
+POST /quiz/<lesson_id>/submit
+
+GET /recommend/<user_id>
+
+
+
+# app.py
+import json
+import uuid
+from datetime import datetime
+from typing import Dict, Any, List
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+DATA_FILE = "elearn_data.json"
+
+COURSES: Dict[str, Dict[str, Any]] = {}
+LESSONS: Dict[str, Dict[str, Any]] = {}
+USERS: Dict[str, Dict[str, Any]] = {}
+ENROLLMENTS: Dict[str, Dict[str, Any]] = {}  # key: user_id: {course_id -> enrollment}
+PROGRESS: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> list of lesson progress
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({
+            "COURSES": COURSES,
+            "LESSONS": LESSONS,
+            "USERS": USERS,
+            "ENROLLMENTS": ENROLLMENTS,
+            "PROGRESS": PROGRESS
+        }, f, indent=2, default=str)
+
+def load_data():
+    global COURSES, LESSONS, USERS, ENROLLMENTS, PROGRESS
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            COURSES = data.get("COURSES", {})
+            LESSONS = data.get("LESSONS", {})
+            USERS = data.get("USERS", {})
+            ENROLLMENTS = data.get("ENROLLMENTS", {})
+            PROGRESS = data.get("PROGRESS", {})
+    except FileNotFoundError:
+        pass
+
+load_data()
+
+# ---------------------------
+# Helpers
+# ---------------------------
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+def course_outline(course: Dict[str, Any]) -> List[str]:
+    # Returns ordered lesson_ids by module order and lesson order
+    lesson_ids = []
+    for mod in course.get("modules", []):
+        for l in mod.get("lessons", []):
+            lesson_ids.append(l["lesson_id"])
+    return lesson_ids
+
+def next_unfinished_lesson(user_id: str, course_id: str) -> Any:
+    outline = course_outline(COURSES[course_id])
+    done = {p["lesson_id"] for p in PROGRESS.get(user_id, []) if p["course_id"] == course_id and p["completed"]}
+    for lid in outline:
+        if lid not in done:
+            return lid
+    return None
+
+def recommend_next_lessons(user_id: str) -> List[Dict[str, Any]]:
+    recs = []
+    enrolls = ENROLLMENTS.get(user_id, {})
+    for cid, enr in enrolls.items():
+        lid = next_unfinished_lesson(user_id, cid)
+        if lid:
+            lesson = LESSONS[lid]
+            recs.append({
+                "course_id": cid,
+                "course_title": COURSES[cid]["title"],
+                "lesson_id": lid,
+                "lesson_title": lesson["title"],
+                "difficulty": lesson.get("difficulty", 2)
+            })
+    # Sort by difficulty (easier first)
+    recs.sort(key=lambda x: x["difficulty"])
+    return recs
+
+def grade_quiz(quiz: Dict[str, Any], answers: Dict[str, Any]) -> Dict[str, Any]:
+    # quiz: {"questions": [{"id": "q1", "text": "...", "options": [...], "correct": "A"}, ...]}
+    correct = 0
+    detailed = []
+    for q in quiz.get("questions", []):
+        qid = q["id"]
+        chosen = answers.get(qid)
+        is_correct = (chosen == q.get("correct"))
+        correct += int(is_correct)
+        detailed.append({"question_id": qid, "chosen": chosen, "correct": q.get("correct"), "is_correct": is_correct})
+    total = len(quiz.get("questions", []))
+    score_percent = (correct / total * 100) if total else 0
+    return {"correct": correct, "total": total, "score_percent": round(score_percent, 2), "details": detailed}
+
+# ---------------------------
+# Seed demo content (optional)
+# ---------------------------
+if not COURSES:
+    # Create demo course with modules and lessons
+    course_id = new_id("course")
+    lesson1_id = new_id("lesson")
+    lesson2_id = new_id("lesson")
+    lesson3_id = new_id("lesson")
+
+    COURSES[course_id] = {
+        "id": course_id,
+        "title": "Python Fundamentals",
+        "description": "Learn basics of Python: syntax, data structures, and functions.",
+        "level": "beginner",
+        "modules": [
+            {"title": "Getting Started", "lessons": [{"lesson_id": lesson1_id}]},
+            {"title": "Core Concepts", "lessons": [{"lesson_id": lesson2_id}, {"lesson_id": lesson3_id}]}
+        ],
+        "created_at": datetime.utcnow().isoformat()
+    }
+    LESSONS[lesson1_id] = {
+        "id": lesson1_id,
+        "course_id": course_id,
+        "title": "Intro to Python",
+        "content": "What is Python, installing Python, running scripts.",
+        "duration_min": 20,
+        "difficulty": 1,
+        "quiz": {
+            "questions": [
+                {"id": "q1", "text": "Python is a ...", "options": ["Snake", "Language"], "correct": "Language"},
+                {"id": "q2", "text": "File extension for Python files?", "options": [".py", ".js"], "correct": ".py"}
+            ]
+        }
+    }
+    LESSONS[lesson2_id] = {
+        "id": lesson2_id,
+        "course_id": course_id,
+        "title": "Data Types",
+        "content": "Numbers, strings, lists, dicts, tuples.",
+        "duration_min": 30,
+        "difficulty": 2,
+        "quiz": {
+            "questions": [
+                {"id": "q1", "text": "A list is ...", "options": ["Mutable", "Immutable"], "correct": "Mutable"}
+            ]
+        }
+    }
+    LESSONS[lesson3_id] = {
+        "id": lesson3_id,
+        "course_id": course_id,
+        "title": "Functions",
+        "content": "Defining and calling functions, scope, arguments.",
+        "duration_min": 35,
+        "difficulty": 2,
+        "quiz": {"questions": []}
+    }
+    save_data()
+
+# ---------------------------
+# API endpoints
+# ---------------------------
+
+@app.route("/courses", methods=["POST"])
+def create_course():
+    payload = request.get_json(force=True)
+    course_id = new_id("course")
+    modules = payload.get("modules", [])
+    course = {
+        "id": course_id,
+        "title": payload.get("title", "Untitled"),
+        "description": payload.get("description", ""),
+        "level": payload.get("level", "beginner"),
+        "modules": modules,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    # validate lessons exist
+    for m in modules:
+        for l in m.get("lessons", []):
+            lid = l.get("lesson_id")
+            if lid not in LESSONS:
+                return jsonify({"error": f"lesson {lid} not found"}), 400
+    COURSES[course_id] = course
+    save_data()
+    return jsonify(course), 201
+
+@app.route("/courses", methods=["GET"])
+def list_courses():
+    return jsonify({"courses": list(COURSES.values())})
+
+@app.route("/course/<course_id>", methods=["GET"])
+def get_course(course_id):
+    c = COURSES.get(course_id)
+    if not c:
+        return jsonify({"error": "course not found"}), 404
+    outline = [{"module": m["title"], "lessons": [LESSONS[l["lesson_id"]]["title"] for l in m["lessons"]]} for m in c["modules"]]
+    return jsonify({"course": c, "outline": outline})
+
+@app.route("/lessons", methods=["POST"])
+def create_lesson():
+    payload = request.get_json(force=True)
+    lesson_id = new_id("lesson")
+    course_id = payload.get("course_id")
+    if course_id not in COURSES:
+        return jsonify({"error": "course not found"}), 404
+    lesson = {
+        "id": lesson_id,
+        "course_id": course_id,
+        "title": payload.get("title", "Untitled Lesson"),
+        "content": payload.get("content", ""),
+        "duration_min": int(payload.get("duration_min", 20)),
+        "difficulty": int(payload.get("difficulty", 2)),
+        "quiz": payload.get("quiz", {"questions": []})
+    }
+    LESSONS[lesson_id] = lesson
+    save_data()
+    return jsonify(lesson), 201
+
+@app.route("/lesson/<lesson_id>", methods=["GET"])
+def get_lesson(lesson_id):
+    l = LESSONS.get(lesson_id)
+    if not l:
+        return jsonify({"error": "lesson not found"}), 404
+    return jsonify(l)
+
+@app.route("/users", methods=["POST"])
+def create_user():
+    payload = request.get_json(force=True)
+    user_id = new_id("user")
+    user = {
+        "id": user_id,
+        "name": payload.get("name", "Learner"),
+        "email": payload.get("email", ""),
+        "created_at": datetime.utcnow().isoformat()
+    }
+    USERS[user_id] = user
+    ENROLLMENTS[user_id] = {}
+    PROGRESS[user_id] = []
+    save_data()
+    return jsonify(user), 201
+
+@app.route("/users/<user_id>", methods=["GET"])
+def get_user(user_id):
+    u = USERS.get(user_id)
+    if not u:
+        return jsonify({"error": "user not found"}), 404
+    return jsonify(u)
+
+@app.route("/enroll", methods=["POST"])
+def enroll():
+    payload = request.get_json(force=True)
+    user_id = payload.get("user_id")
+    course_id = payload.get("course_id")
+    if user_id not in USERS or course_id not in COURSES:
+        return jsonify({"error": "user or course not found"}), 404
+    ENROLLMENTS[user_id][course_id] = {
+        "course_id": course_id,
+        "enrolled_at": datetime.utcnow().isoformat(),
+        "status": "active"
+    }
+    save_data()
+    return jsonify(ENROLLMENTS[user_id][course_id]), 201
+
+@app.route("/enrollments/<user_id>", methods=["GET"])
+def enrollments(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    return jsonify({"enrollments": list(ENROLLMENTS[user_id].values())})
+
+@app.route("/progress/<user_id>", methods=["POST"])
+def update_progress(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    payload = request.get_json(force=True)
+    course_id = payload.get("course_id")
+    lesson_id = payload.get("lesson_id")
+    completed = bool(payload.get("completed", False))
+    time_spent_min = int(payload.get("time_spent_min", 0))
+    if course_id not in COURSES or lesson_id not in LESSONS:
+        return jsonify({"error": "course or lesson not found"}), 404
+
+    entry = {
+        "course_id": course_id,
+        "lesson_id": lesson_id,
+        "completed": completed,
+        "time_spent_min": time_spent_min,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    PROGRESS[user_id].append(entry)
+    save_data()
+    # Suggest next lesson in the same course
+    next_lid = next_unfinished_lesson(user_id, course_id)
+    return jsonify({"progress": entry, "next_lesson_id": next_lid})
+
+@app.route("/quiz/<lesson_id>/submit", methods=["POST"])
+def submit_quiz(lesson_id):
+    lesson = LESSONS.get(lesson_id)
+    if not lesson:
+        return jsonify({"error": "lesson not found"}), 404
+    payload = request.get_json(force=True)
+    answers = payload.get("answers", {})
+    result = grade_quiz(lesson.get("quiz", {"questions": []}), answers)
+    return jsonify(result)
+
+@app.route("/recommend/<user_id>", methods=["GET"])
+def recommend(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    recs = recommend_next_lessons(user_id)
+    return jsonify({"recommendations": recs})
+
+# ---------------------------
+# Run server
+# ---------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+curl -X POST http://localhost:8000/users \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Aarav","email":"aarav@example.com"}'
+
+
+curl http://localhost:8000/courses
+
+
+curl -X POST http://localhost:8000/enroll \
+ -H "Content-Type: application/json" \
+ -d '{"user_id":"<USER_ID>","course_id":"<COURSE_ID>"}'
+
+
+curl http://localhost:8000/lesson/<LESSON_ID>
+
+
+curl -X POST http://localhost:8000/quiz/<LESSON_ID>/submit \
+ -H "Content-Type: application/json" \
+ -d '{"answers":{"q1":"Language","q2":".py"}}'
+
+curl -X POST http://localhost:8000/progress/<USER_ID> \
+ -H "Content-Type: application/json" \
+ -d '{"course_id":"<COURSE_ID>","lesson_id":"<LESSON_ID>","completed":true,"time_spent_min":25}'
+
+
+curl http://localhost:8000/recommend/<USER_ID>
