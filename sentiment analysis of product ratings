@@ -1,0 +1,46 @@
+Requirements
+text
+pandas==2.2.2
+scikit-learn==1.5.2
+
+# Sentiment Analysis for Product Ratings
+# Install dependencies first:
+# pip install textblob pandas
+
+from textblob import TextBlob
+import pandas as pd
+
+# Example dataset: product reviews with ratings (1–5 stars)
+data = {
+    "review": [
+        "This product is amazing! Works perfectly.",
+        "Terrible quality, broke after one use.",
+        "Average experience, nothing special.",
+        "I love it! Highly recommend.",
+        "Not worth the money."
+    ],
+    "rating": [5, 1, 3, 5, 2]
+}
+
+df = pd.DataFrame(data)
+
+# Function to calculate sentiment polarity
+def get_sentiment(text):
+    blob = TextBlob(text)
+    return blob.sentiment.polarity  # range: -1 (negative) to +1 (positive)
+
+# Apply sentiment analysis
+df["sentiment_score"] = df["review"].apply(get_sentiment)
+
+# Classify sentiment into Positive / Neutral / Negative
+def classify_sentiment(score):
+    if score > 0.2:
+        return "Positive"
+    elif score < -0.2:
+        return "Negative"
+    else:
+        return "Neutral"
+
+df["sentiment_label"] = df["sentiment_score"].apply(classify_sentiment)
+
+print(df)
