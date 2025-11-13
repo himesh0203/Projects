@@ -1,0 +1,337 @@
+Setup
+Requirements: Python 3.9+, pip install flask numpy pandas scikit-learn
+
+Run: Save as app.py, then python app.py
+
+Use: Try endpoints with curl or Postman:
+
+POST /sensor
+
+GET /recommend/<field_id>
+
+GET /status/<field_id>
+
+GET /fields
+
+
+
+# app.py
+import json
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
+
+import numpy as np
+import pandas as pd
+from flask import Flask, request, jsonify
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+app = Flask(__name__)
+
+# --- Simple storage (replace with a database in production) ---
+FIELDS: Dict[str, Dict[str, Any]] = {}
+SENSOR_LOGS: Dict[str, List[Dict[str, Any]]] = {}
+
+DATA_FILE = "agri_data.json"
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({"FIELDS": FIELDS, "SENSOR_LOGS": SENSOR_LOGS}, f, indent=2, default=str)
+
+def load_data():
+    global FIELDS, SENSOR_LOGS
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            FIELDS = data.get("FIELDS", {})
+            SENSOR_LOGS = data.get("SENSOR_LOGS", {})
+    except FileNotFoundError:
+        FIELDS, SENSOR_LOGS = {}, {}
+
+load_data()
+
+# --- Domain constants ---
+CROP_DEFAULTS = {
+    "rice": {"moisture_opt": 0.32, "moisture_min": 0.25, "et0_coeff": 1.15},
+    "wheat": {"moisture_opt": 0.28, "moisture_min": 0.20, "et0_coeff": 0.9},
+    "maize": {"moisture_opt": 0.30, "moisture_min": 0.22, "et0_coeff": 1.05},
+    "soy": {"moisture_opt": 0.27, "moisture_min": 0.20, "et0_coeff": 0.85},
+}
+
+STAGES = ["seedling", "vegetative", "flowering", "fruiting", "maturity"]
+
+# --- Simple ML pipeline (trained on synthetic data for demo) ---
+model_pipeline: Optional[Pipeline] = None
+
+def generate_synthetic_training(n: int = 1500) -> pd.DataFrame:
+    rng = np.random.default_rng(42)
+    crops = list(CROP_DEFAULTS.keys())
+    stages = STAGES
+    rows = []
+    for _ in range(n):
+        crop = rng.choice(crops)
+        stage = rng.choice(stages)
+        temp = rng.uniform(18, 40)
+        rh = rng.uniform(25, 95)          # relative humidity %
+        rainfall = rng.uniform(0, 25)     # mm last 24h
+        ndvi = rng.uniform(0.2, 0.85)
+        moisture = rng.uniform(0.12, 0.40)  # volumetric water content
+        wind = rng.uniform(0.5, 6.0)      # m/s
+        et0_coeff = CROP_DEFAULTS[crop]["et0_coeff"]
+        et0 = (0.0023 * (temp + 17.8)) * (1 - (rh / 200)) * (1 + wind / 10)  # very rough
+        et_crop = et0 * et0_coeff
+        deficit = max(CROP_DEFAULTS[crop]["moisture_opt"] - moisture, 0)
+        # Irrigation target liters per m^2 (toy function)
+        irr = max(deficit * 50 + et_crop * 1.5 - rainfall * 0.6, 0)
+        # Fertilization need: simple heuristic tied to NDVI and stage
+        fert_flag = int(ndvi < 0.4 and stage in ["vegetative", "flowering"])
+        rows.append({
+            "crop": crop, "stage": stage, "temperature": temp, "humidity": rh,
+            "rainfall_mm": rainfall, "ndvi": ndvi, "soil_moisture": moisture,
+            "wind_speed": wind, "et0": et0, "irr_lpm2": irr, "fert_flag": fert_flag
+        })
+    return pd.DataFrame(rows)
+
+def train_model():
+    global model_pipeline
+    df = generate_synthetic_training()
+    features = ["crop", "stage", "temperature", "humidity", "rainfall_mm",
+                "ndvi", "soil_moisture", "wind_speed", "et0"]
+    y = df["irr_lpm2"]
+
+    pre = ColumnTransformer(
+        transformers=[
+            ("cat", OneHotEncoder(handle_unknown="ignore"), ["crop", "stage"]),
+            ("num", "passthrough", ["temperature", "humidity", "rainfall_mm",
+                                    "ndvi", "soil_moisture", "wind_speed", "et0"])
+        ]
+    )
+    rf = RandomForestRegressor(n_estimators=120, random_state=7)
+    model_pipeline = Pipeline(steps=[("prep", pre), ("model", rf)])
+    model_pipeline.fit(df[features], y)
+
+train_model()
+
+# --- Utility functions ---
+def et0_simplified(temp_c: float, rh_percent: float, wind_mps: float) -> float:
+    return max((0.0023 * (temp_c + 17.8)) * (1 - (rh_percent / 200)) * (1 + wind_mps / 10), 0)
+
+def crop_cfg(crop: str) -> Dict[str, float]:
+    return CROP_DEFAULTS.get(crop, {"moisture_opt": 0.28, "moisture_min": 0.20, "et0_coeff": 1.0})
+
+def rule_based_adjustment(rec_lpm2: float, crop: str, stage: str, moisture: float, rainfall_mm: float) -> float:
+    cfg = crop_cfg(crop)
+    # Reduce irrigation if recent rainfall is high
+    if rainfall_mm > 10:
+        rec_lpm2 *= 0.6
+    # Boost during flowering/fruiting if moisture below min
+    if stage in ["flowering", "fruiting"] and moisture < cfg["moisture_min"]:
+        rec_lpm2 *= 1.2
+    # Clamp unreasonable values
+    return float(np.clip(rec_lpm2, 0, 25))
+
+def suggest_window(temp_c: float, rh_percent: float) -> str:
+    # Cooler, higher RH windows reduce evaporation: early morning or late evening
+    if temp_c >= 35:
+        return "Irrigate after sunset (19:00–22:00) to reduce losses."
+    if temp_c <= 24 and rh_percent >= 60:
+        return "Irrigate early morning (05:30–07:30) for efficient uptake."
+    return "Prefer morning (06:00–08:00) or evening (18:00–20:00)."
+
+def disease_risk_hint(ndvi: float, humidity: float, stage: str) -> Optional[str]:
+    if ndvi < 0.35 and humidity > 80 and stage in ["vegetative", "flowering"]:
+        return "High humidity with low NDVI suggests stress; inspect for pests or fungal issues."
+    return None
+
+def persistent_low_moisture(field_id: str) -> bool:
+    logs = SENSOR_LOGS.get(field_id, [])
+    if len(logs) < 5:
+        return False
+    last5 = logs[-5:]
+    return sum(1 for l in last5 if l["soil_moisture"] < crop_cfg(l["crop"])["moisture_min"]) >= 4
+
+# --- API endpoints ---
+@app.route("/fields", methods=["POST"])
+def create_field():
+    payload = request.get_json(force=True)
+    field_id = str(uuid.uuid4())
+    field = {
+        "id": field_id,
+        "name": payload.get("name", f"Field-{field_id[:8]}"),
+        "area_m2": float(payload.get("area_m2", 1000.0)),
+        "crop": payload.get("crop", "wheat"),
+        "stage": payload.get("stage", "vegetative"),
+        "location": payload.get("location", {"lat": 0.0, "lon": 0.0}),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    FIELDS[field_id] = field
+    SENSOR_LOGS[field_id] = []
+    save_data()
+    return jsonify({"field_id": field_id, "field": field})
+
+@app.route("/fields", methods=["GET"])
+def list_fields():
+    return jsonify({"fields": list(FIELDS.values())})
+
+@app.route("/sensor", methods=["POST"])
+def ingest_sensor():
+    payload = request.get_json(force=True)
+    field_id = payload.get("field_id")
+    if field_id not in FIELDS:
+        return jsonify({"error": "Field not found"}), 404
+
+    # Sensor reading
+    reading = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "crop": FIELDS[field_id]["crop"],
+        "stage": FIELDS[field_id]["stage"],
+        "temperature": float(payload.get("temperature", 30.0)),
+        "humidity": float(payload.get("humidity", 60.0)),
+        "rainfall_mm": float(payload.get("rainfall_mm", 0.0)),
+        "ndvi": float(payload.get("ndvi", 0.6)),
+        "soil_moisture": float(payload.get("soil_moisture", 0.25)),
+        "wind_speed": float(payload.get("wind_speed", 1.5)),
+    }
+    reading["et0"] = et0_simplified(reading["temperature"], reading["humidity"], reading["wind_speed"])
+    SENSOR_LOGS[field_id].append(reading)
+    save_data()
+    return jsonify({"status": "ingested", "reading": reading})
+
+@app.route("/recommend/<field_id>", methods=["GET"])
+def recommend(field_id):
+    if field_id not in FIELDS:
+        return jsonify({"error": "Field not found"}), 404
+    logs = SENSOR_LOGS.get(field_id, [])
+    if not logs:
+        return jsonify({"message": "No sensor data yet. POST /sensor first."}), 400
+
+    latest = logs[-1]
+    features = {k: latest[k] for k in ["crop", "stage", "temperature", "humidity",
+                                       "rainfall_mm", "ndvi", "soil_moisture", "wind_speed", "et0"]}
+
+    # ML prediction (liters per m^2)
+    base_rec = float(model_pipeline.predict(pd.DataFrame([features]))[0])
+
+    # Rule-based adjustment
+    rec_lpm2 = rule_based_adjustment(base_rec, latest["crop"], latest["stage"], latest["soil_moisture"], latest["rainfall_mm"])
+
+    # Compute total liters for the field
+    area = float(FIELDS[field_id]["area_m2"])
+    total_liters = round(rec_lpm2 * area, 2)
+
+    window = suggest_window(latest["temperature"], latest["humidity"])
+    risk = disease_risk_hint(latest["ndvi"], latest["humidity"], latest["stage"])
+    low_m_alert = persistent_low_moisture(field_id)
+
+    return jsonify({
+        "field_id": field_id,
+        "recommendation": {
+            "irrigation_liters_total": total_liters,
+            "irrigation_liters_per_m2": round(rec_lpm2, 2),
+            "optimal_window": window,
+            "skip_today_if_rainfall_mm_gt": 20.0
+        },
+        "fertilization": {
+            "needed": bool(latest["ndvi"] < 0.4 and latest["stage"] in ["vegetative", "flowering"]),
+            "note": "Consider nitrogen top-dress if NDVI is low during vegetative growth."
+        },
+        "alerts": {
+            "persistent_low_moisture": low_m_alert,
+            "disease_risk_hint": risk
+        },
+        "context": {
+            "crop": latest["crop"],
+            "stage": latest["stage"],
+            "temperature_c": latest["temperature"],
+            "humidity_percent": latest["humidity"],
+            "rainfall_mm_24h": latest["rainfall_mm"],
+            "ndvi": latest["ndvi"],
+            "soil_moisture_vwc": latest["soil_moisture"],
+            "et0": round(latest["et0"], 3),
+            "timestamp": latest["timestamp"]
+        }
+    })
+
+@app.route("/status/<field_id>", methods=["GET"])
+def status(field_id):
+    if field_id not in FIELDS:
+        return jsonify({"error": "Field not found"}), 404
+    logs = SENSOR_LOGS.get(field_id, [])
+    if not logs:
+        return jsonify({"message": "No sensor data yet.", "readings": 0})
+
+    df = pd.DataFrame(logs)
+    trend = {
+        "readings": len(logs),
+        "avg_soil_moisture": round(float(df["soil_moisture"].tail(20).mean()), 3),
+        "avg_temperature": round(float(df["temperature"].tail(20).mean()), 2),
+        "avg_humidity": round(float(df["humidity"].tail(20).mean()), 1),
+        "last_rainfall_mm": float(df["rainfall_mm"].iloc[-1]),
+        "last_ndvi": float(df["ndvi"].iloc[-1]),
+        "last_timestamp": logs[-1]["timestamp"]
+    }
+
+    return jsonify({"field": FIELDS[field_id], "trend": trend})
+
+# --- Optional: simple simulator endpoint ---
+@app.route("/simulate/<field_id>", methods=["POST"])
+def simulate(field_id):
+    if field_id not in FIELDS:
+        return jsonify({"error": "Field not found"}), 404
+
+    payload = request.get_json(force=True)
+    days = int(payload.get("days", 3))
+    base_temp = float(payload.get("base_temp", 32))
+    base_hum = float(payload.get("base_humidity", 55))
+
+    for i in range(days):
+        temp = base_temp + np.random.uniform(-3, 3)
+        hum = np.clip(base_hum + np.random.uniform(-10, 10), 25, 95)
+        rainfall = max(np.random.normal(3, 5), 0)  # mm
+        ndvi = np.clip(np.random.normal(0.6, 0.08), 0.2, 0.9)
+        sm = np.clip(np.random.normal(0.26, 0.04) + (rainfall * 0.002), 0.12, 0.42)
+        wind = np.clip(np.random.normal(1.5, 0.8), 0.2, 7.0)
+        reading = {
+            "timestamp": (datetime.utcnow() + timedelta(days=i)).isoformat(),
+            "crop": FIELDS[field_id]["crop"],
+            "stage": FIELDS[field_id]["stage"],
+            "temperature": float(temp),
+            "humidity": float(hum),
+            "rainfall_mm": float(rainfall),
+            "ndvi": float(ndvi),
+            "soil_moisture": float(sm),
+            "wind_speed": float(wind),
+        }
+        reading["et0"] = et0_simplified(reading["temperature"], reading["humidity"], reading["wind_speed"])
+        SENSOR_LOGS[field_id].append(reading)
+
+    save_data()
+    return jsonify({"status": "simulated", "added_readings": days})
+
+# --- Run server ---
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+curl -X POST http://localhost:8000/fields \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Plot A","area_m2":2500,"crop":"rice","stage":"vegetative","location":{"lat":18.99,"lon":73.11}}'
+
+
+curl -X POST http://localhost:8000/sensor \
+ -H "Content-Type: application/json" \
+ -d '{"field_id":"<FIELD_ID>","temperature":33,"humidity":62,"rainfall_mm":2.5,"ndvi":0.55,"soil_moisture":0.23,"wind_speed":2.0}'
+
+
+curl http://localhost:8000/recommend/<FIELD_ID>
+
+
+curl http://localhost:8000/status/<FIELD_ID>
+
+
+curl -X POST http://localhost:8000/simulate/<FIELD_ID> \
+ -H "Content-Type: application/json" \
+ -d '{"days":5,"base_temp":31,"base_humidity":58}'
