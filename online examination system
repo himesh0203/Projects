@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+"""
+Simple console-based Online Examination System
+- Users can sign up / log in
+- Admin can create exams and questions
+- Users can take exams with timers
+- Results stored in JSON (exams.json, users.json, results.json)
+
+Run:
+    python online_exam.py
+
+Notes:
+- Default admin login: username=admin, password=admin123
+- Data files will be created in the working directory if absent.
+"""
+
+import json
+import os
+import time
+import uuid
+from getpass import getpass
+from datetime import datetime
+
+DATA_DIR = "."
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+EXAMS_FILE = os.path.join(DATA_DIR, "exams.json")
+RESULTS_FILE = os.path.join(DATA_DIR, "results.json")
+
+
+# ----------------------------
+# Utilities for data storage
+# ----------------------------
+def load_json(path, default):
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def init_files():
+    # Users
+    users = load_json(USERS_FILE, [])
+    if not any(u.get("is_admin") for u in users):
+        # seed default admin if none exists
+        users.append({
+            "user_id": str(uuid.uuid4()),
+            "username": "admin",
+            "password": "admin123",  # in real systems, hash this!
+            "is_admin": True,
+            "created_at": datetime.utcnow().isoformat()
+        })
+        save_json(USERS_FILE, users)
+    else:
+        save_json(USERS_FILE, users)
+
+    # Exams
+    exams = load_json(EXAMS_FILE, [])
+    save_json(EXAMS_FILE, exams)
+
+    # Results
+    results = load_json(RESULTS_FILE, [])
+    save_json(RESULTS_FILE, results)
+
+
+# ----------------------------
+# Core models
+# ----------------------------
+class Question:
+    def __init__(self, text, options, correct_index, marks=1, negative_marks=0):
+        self.question_id = str(uuid.uuid4())
+        self.text = text
+        self.options = options  # list[str]
+        self.correct_index = correct_index  # int
+        self.marks = marks
+        self.negative_marks = negative_marks
+
+    def to_dict(self):
+        return {
+            "question_id": self.question_id,
+            "text": self.text,
+            "options": self.options,
+            "correct_index": self.correct_index,
+            "marks": self.marks,
+            "negative_marks": self.negative_marks
+        }
+
+    @staticmethod
+    def from_dict(d):
+        q = Question(d["text"], d["options"], d["correct_index"], d.get("marks", 1), d.get("negative_marks", 0))
+        q.question_id = d["question_id"]
+        return q
+
+
+class Exam:
+    def __init__(self, title, description, pass_percentage=40, total_time_sec=300, per_question_time_sec=60, shuffle=True):
+        self.exam_id = str(uuid.uuid4())
+        self.title = title
+        self.description = description
+        self.pass_percentage = pass_percentage
+        self.total_time_sec = total_time_sec
+        self.per_question_time_sec = per_question_time_sec
+        self.shuffle = shuffle
+        self.questions = []  # list[Question]
+
+    def add_question(self, question: Question):
+        self.questions.append(question)
+
+    def to_dict(self):
+        return {
+            "exam_id": self.exam_id,
+            "title": self.title,
+            "description": self.description,
+            "pass_percentage": self.pass_percentage,
+            "total_time_sec": self.total_time_sec,
+            "per_question_time_sec": self.per_question_time_sec,
+            "shuffle": self.shuffle,
+            "questions": [q.to_dict() for q in self.questions]
+        }
+
+    @staticmethod
+    def from_dict(d):
+        e = Exam(d["title"], d["description"], d["pass_percentage"], d["total_time_sec"], d["per_question_time_sec"], d.get("shuffle", True))
+        e.exam_id = d["exam_id"]
+        e.questions = [Question.from_dict(q) for q in d.get("questions", [])]
+        return e
+
+
+# ----------------------------
+# Business logic
+# ----------------------------
+class OnlineExamSystem:
+    def __init__(self):
+        init_files()
+        self.users = load_json(USERS_FILE, [])
+        self.exams = [Exam.from_dict(e) for e in load_json(EXAMS_FILE, [])]
+        self.results = load_json(RESULTS_FILE, [])
+        self.current_user = None
+
+    # --- Auth ---
+    def signup(self):
+        print("\n=== Sign Up ===")
+        username = input("Enter username: ").strip()
+        if any(u["username"] == username for u in self.users):
+            print("Username already exists.")
+            return
+        password = getpass("Enter password: ").strip()
+        confirm = getpass("Confirm password: ").strip()
+        if password != confirm:
+            print("Passwords do not match.")
+            return
+        user = {
+            "user_id": str(uuid.uuid4()),
+            "username": username,
+            "password": password,
+            "is_admin": False,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        self.users.append(user)
+        save_json(USERS_FILE, self.users)
+        print("Signup successful. You can now log in.")
+
+    def login(self):
+        print("\n=== Log In ===")
+        username = input("Enter username: ").strip()
+        password = getpass("Enter password: ").strip()
+        found = next((u for u in self.users if u["username"] == username and u["password"] == password), None)
+        if not found:
+            print("Invalid credentials.")
+            return
+        self.current_user = found
+        print(f"Welcome, {self.current_user['username']}!")
+
+    def logout(self):
+        self.current_user = None
+        print("Logged out.")
+
+    # --- Admin actions ---
+    def admin_menu(self):
+        while True:
+            print("\n=== Admin Menu ===")
+            print("1. Create exam")
+            print("2. List exams")
+            print("3. Add question to exam")
+            print("4. Delete exam")
+            print("5. View all results")
+            print("6. Logout")
+            choice = input("Select: ").strip()
+
+            if choice == "1":
+                self.create_exam()
+            elif choice == "2":
+                self.list_exams()
+            elif choice == "3":
+                self.add_question_to_exam()
+            elif choice == "4":
+                self.delete_exam()
+            elif choice == "5":
+                self.view_all_results()
+            elif choice == "6":
+                self.logout()
+                break
+            else:
+                print("Invalid choice.")
+
+    def create_exam(self):
+        print("\n=== Create Exam ===")
+        title = input("Title: ").strip()
+        description = input("Description: ").strip()
+        pass_percentage = int(input("Pass percentage (e.g., 40): ").strip() or "40")
+        total_time_sec = int(input("Total time in seconds (e.g., 300): ").strip() or "300")
+        per_question_time_sec = int(input("Per-question time in seconds (e.g., 60): ").strip() or "60")
+        shuffle = input("Shuffle questions? (y/n): ").strip().lower() != "n"
+
+        exam = Exam(title, description, pass_percentage, total_time_sec, per_question_time_sec, shuffle)
+        self.exams.append(exam)
+        self._save_exams()
+        print(f"Exam created with ID: {exam.exam_id}")
+
+    def list_exams(self, show_questions=False):
+        print("\n=== Exams ===")
+        if not self.exams:
+            print("No exams available.")
+            return
+        for i, e in enumerate(self.exams, start=1):
+            print(f"{i}. {e.title} (ID: {e.exam_id}) | Pass: {e.pass_percentage}% | Total Time: {e.total_time_sec}s | Questions: {len(e.questions)}")
+            if show_questions:
+                for j, q in enumerate(e.questions, start=1):
+                    print(f"   {j}) {q.text} [{q.marks} marks, -{q.negative_marks}]")
+
+    def add_question_to_exam(self):
+        self.list_exams()
+        exam_id = input("Enter Exam ID to add question: ").strip()
+        exam = self._get_exam_by_id(exam_id)
+        if not exam:
+            print("Exam not found.")
+            return
+        print("\n=== New Question ===")
+        text = input("Question text: ").strip()
+        options = []
+        while True:
+            opt = input(f"Add option {len(options)+1} (or blank to finish): ").strip()
+            if not opt:
+                break
+            options.append(opt)
+        if len(options) < 2:
+            print("At least two options required.")
+            return
+        for idx, opt in enumerate(options):
+            print(f"{idx}. {opt}")
+        correct_index = int(input("Index of correct option: ").strip())
+        if not (0 <= correct_index < len(options)):
+            print("Invalid index.")
+            return
+        marks = int(input("Marks for this question (default 1): ").strip() or "1")
+        negative = int(input("Negative marks for wrong answer (default 0): ").strip() or "0")
+
+        q = Question(text, options, correct_index, marks, negative)
+        exam.add_question(q)
+        self._save_exams()
+        print("Question added.")
+
+    def delete_exam(self):
+        self.list_exams()
+        exam_id = input("Enter Exam ID to delete: ").strip()
+        before = len(self.exams)
+        self.exams = [e for e in self.exams if e.exam_id != exam_id]
+        if len(self.exams) == before:
+            print("Exam not found.")
+        else:
+            self._save_exams()
+            print("Exam deleted.")
+
+    def view_all_results(self):
+        print("\n=== All Results ===")
+        res = load_json(RESULTS_FILE, [])
+        if not res:
+            print("No results yet.")
+            return
+        for r in res:
+            print(f"{r['timestamp']} | User: {r['username']} | Exam: {r['exam_title']} | Score: {r['score']}/{r['total_marks']} | {r['status']}")
+
+    # --- User actions ---
+    def user_menu(self):
+        while True:
+            print("\n=== User Menu ===")
+            print("1. List exams")
+            print("2. Take exam")
+            print("3. View my results")
+            print("4. Logout")
+            choice = input("Select: ").strip()
+
+            if choice == "1":
+                self.list_exams()
+            elif choice == "2":
+                self.take_exam()
+            elif choice == "3":
+                self.view_my_results()
+            elif choice == "4":
+                self.logout()
+                break
+            else:
+                print("Invalid choice.")
+
+    def take_exam(self):
+        self.list_exams()
+        exam_id = input("Enter Exam ID to take: ").strip()
+        exam = self._get_exam_by_id(exam_id)
+        if not exam:
+            print("Exam not found.")
+            return
+        if len(exam.questions) == 0:
+            print("No questions in this exam.")
+            return
+
+        print(f"\nStarting exam: {exam.title}")
+        print(f"Total time: {exam.total_time_sec} seconds; Per-question: {exam.per_question_time_sec} seconds")
+        print("Press Enter to begin...")
+        input()
+
+        start_time = time.time()
+        elapsed_total = lambda: time.time() - start_time
+
+        # Prepare question order
+        indices = list(range(len(exam.questions)))
+        if exam.shuffle:
+            import random
+            random.shuffle(indices)
+
+        score = 0
+        total_marks = sum(q.marks for q in exam.questions)
+
+        for idx in indices:
+            if elapsed_total() >= exam.total_time_sec:
+                print("\nTime up for the entire exam!")
+                break
+
+            q = exam.questions[idx]
+            print("\n-----------------------------")
+            print(f"Q{idx+1}: {q.text}")
+            for i, opt in enumerate(q.options):
+                print(f"  {i}. {opt}")
+
+            # Per-question timing
+            q_start = time.time()
+            answer = None
+            while True:
+                remaining_exam = max(0, exam.total_time_sec - int(elapsed_total()))
+                remaining_q = max(0, exam.per_question_time_sec - int(time.time() - q_start))
+                print(f"(Time left - Exam: {remaining_exam}s, Question: {remaining_q}s)")
+                if remaining_q <= 0 or remaining_exam <= 0:
+                    print("Time up for this question.")
+                    break
+                raw = input("Enter option index (or 's' to skip): ").strip()
+                if raw.lower() == 's':
+                    break
+                if raw.isdigit():
+                    ai = int(raw)
+                    if 0 <= ai < len(q.options):
+                        answer = ai
+                        break
+                    else:
+                        print("Invalid option index.")
+                else:
+                    print("Please enter a number or 's'.")
+
+            # Scoring
+            if answer is None:
+                print("Skipped.")
+            elif answer == q.correct_index:
+                score += q.marks
+                print(f"Correct! +{q.marks}")
+            else:
+                score -= q.negative_marks
+                print(f"Wrong. -{q.negative_marks}")
+
+        percentage = (score / total_marks * 100) if total_marks > 0 else 0
+        status = "PASS" if percentage >= exam.pass_percentage else "FAIL"
+        print("\n=== Exam Finished ===")
+        print(f"Score: {score}/{total_marks} ({percentage:.2f}%) -> {status}")
+
+        # Save result
+        self.results.append({
+            "result_id": str(uuid.uuid4()),
+            "user_id": self.current_user["user_id"],
+            "username": self.current_user["username"],
+            "exam_id": exam.exam_id,
+            "exam_title": exam.title,
+            "score": score,
+            "total_marks": total_marks,
+            "percentage": round(percentage, 2),
+            "status": status,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        save_json(RESULTS_FILE, self.results)
+
+    def view_my_results(self):
+        print("\n=== My Results ===")
+        mine = [r for r in self.results if r["user_id"] == self.current_user["user_id"]]
+        if not mine:
+            print("No results yet.")
+            return
+        for r in mine:
+            print(f"{r['timestamp']} | Exam: {r['exam_title']} | Score: {r['score']}/{r['total_marks']} | {r['percentage']}% | {r['status']}")
+
+    # --- Helpers ---
+    def _get_exam_by_id(self, exam_id):
+        return next((e for e in self.exams if e.exam_id == exam_id), None)
+
+    def _save_exams(self):
+        save_json(EXAMS_FILE, [e.to_dict() for e in self.exams])
+
+
+# ----------------------------
+# CLI Entrypoint
+# ----------------------------
+def main():
+    system = OnlineExamSystem()
+    print("=== Online Examination System ===")
+
+    while True:
+        if not system.current_user:
+            print("\n1. Log in")
+            print("2. Sign up")
+            print("3. Exit")
+            choice = input("Select: ").strip()
+            if choice == "1":
+                system.login()
+            elif choice == "2":
+                system.signup()
+            elif choice == "3":
+                print("Goodbye.")
+                break
+            else:
+                print("Invalid choice.")
+        else:
+            if system.current_user.get("is_admin"):
+                system.admin_menu()
+            else:
+                system.user_menu()
+
+
+if __name__ == "__main__":
+    main()
