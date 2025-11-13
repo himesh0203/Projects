@@ -1,0 +1,310 @@
+Project structure
+data/creditcard.csv (or any CSV with features + target)
+
+train.py (train and evaluate models, save artifacts)
+
+infer_api.py (FastAPI service for scoring)
+
+utils.py (shared helpers)
+
+requirements.txt (dependencies)
+
+Tip: If you use the well-known Kaggle dataset (anonymized PCA features), set target column to "Class" and features to all other columns.
+
+
+
+
+
+Utilities
+# utils.py
+import os
+import json
+import joblib
+import numpy as np
+from typing import Dict, Any
+
+ARTIFACTS_DIR = "artifacts"
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+
+def save_artifact(obj, name: str):
+    path = os.path.join(ARTIFACTS_DIR, name)
+    joblib.dump(obj, path)
+    return path
+
+def load_artifact(name: str):
+    path = os.path.join(ARTIFACTS_DIR, name)
+    return joblib.load(path)
+
+def save_metrics(metrics: Dict[str, Any], name: str = "metrics.json"):
+    path = os.path.join(ARTIFACTS_DIR, name)
+    with open(path, "w") as f:
+        json.dump(metrics, f, indent=2)
+    return path
+
+def describe_class_balance(y):
+    total = len(y)
+    pos = int(np.sum(y == 1))
+    neg = total - pos
+    return {"total": total, "positives": pos, "negatives": neg, "pos_rate": round(pos/total, 6)}
+
+
+
+
+Training and evaluation
+# train.py
+import os
+import argparse
+import numpy as np
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    roc_auc_score, average_precision_score, classification_report,
+    confusion_matrix, roc_curve, precision_recall_curve
+)
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.utils.class_weight import compute_class_weight
+
+from utils import save_artifact, save_metrics, describe_class_balance
+
+def get_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", type=str, default=os.path.join("data", "creditcard.csv"),
+                    help="Path to CSV dataset")
+    ap.add_argument("--target", type=str, default="Class",
+                    help="Target column (1=fraud, 0=non-fraud)")
+    ap.add_argument("--test_size", type=float, default=0.2)
+    ap.add_argument("--random_state", type=int, default=42)
+    ap.add_argument("--use_class_weight", action="store_true",
+                    help="Use class weights to handle imbalance")
+    ap.add_argument("--undersample", action="store_true",
+                    help="Randomly undersample majority class in training")
+    return ap.parse_args()
+
+def main():
+    args = get_args()
+    df = pd.read_csv(args.csv)
+    assert args.target in df.columns, f"Target column '{args.target}' not in dataset."
+    y = df[args.target].astype(int).values
+    X = df.drop(columns=[args.target])
+
+    # Identify numeric columns (most fraud datasets are all numeric)
+    num_cols = X.columns.tolist()
+
+    # Train/test split (stratified to keep class ratios)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=args.test_size, random_state=args.random_state, stratify=y
+    )
+
+    print("Class balance (train):", describe_class_balance(y_train))
+    print("Class balance (test):", describe_class_balance(y_test))
+
+    # Optional undersampling of majority class in training
+    if args.undersample:
+        fraud_idx = np.where(y_train == 1)[0]
+        non_idx = np.where(y_train == 0)[0]
+        # Match majority to k * minority size
+        k = 4  # keep more negatives than positives to preserve distribution
+        choose_non = np.random.RandomState(args.random_state).choice(non_idx, size=min(len(non_idx), k * len(fraud_idx)), replace=False)
+        idx = np.concatenate([fraud_idx, choose_non])
+        X_train = X_train.iloc[idx]
+        y_train = y_train[idx]
+        print("After undersampling (train):", describe_class_balance(y_train))
+
+    # Preprocess: impute missing, scale numeric
+    numeric_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler())
+    ])
+
+    preprocessor = ColumnTransformer(
+        transformers=[("num", numeric_transformer, num_cols)],
+        remainder="drop"
+    )
+
+    # Class weights to counter imbalance (optional)
+    class_weight = "balanced" if args.use_class_weight else None
+    if args.use_class_weight and len(np.unique(y_train)) == 2:
+        # Explicit weights (sklearn's "balanced" is fine, but show computation)
+        weights = compute_class_weight(class_weight="balanced", classes=np.array([0,1]), y=y_train)
+        class_weight = {0: float(weights[0]), 1: float(weights[1])}
+
+    # Base model: Logistic Regression (linear, fast, well-calibrated)
+    model = LogisticRegression(
+        penalty="l2",
+        C=1.0,
+        solver="liblinear",
+        max_iter=2000,
+        class_weight=class_weight
+    )
+
+    # Full pipeline
+    pipe = Pipeline(steps=[("prep", preprocessor), ("clf", model)])
+    pipe.fit(X_train, y_train)
+
+    # Evaluation
+    y_proba = pipe.predict_proba(X_test)[:, 1]
+    y_pred_default = (y_proba >= 0.5).astype(int)
+
+    roc_auc = roc_auc_score(y_test, y_proba)
+    pr_auc = average_precision_score(y_test, y_proba)
+    cm = confusion_matrix(y_test, y_pred_default).tolist()
+    report = classification_report(y_test, y_pred_default, output_dict=True)
+
+    # Threshold tuning: choose threshold to optimize F-beta (beta=2 emphasizes recall)
+    precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
+    beta = 2
+    f_beta = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall + 1e-12)
+    best_idx = int(np.nanargmax(f_beta))
+    best_threshold = float(thresholds[max(best_idx - 1, 0)]) if len(thresholds) > 0 else 0.5
+
+    metrics = {
+        "roc_auc": float(roc_auc),
+        "pr_auc": float(pr_auc),
+        "confusion_matrix_default_0.5": cm,
+        "classification_report_default_0.5": report,
+        "best_threshold_f2": best_threshold
+    }
+    print(f"ROC-AUC: {roc_auc:.4f} | PR-AUC: {pr_auc:.4f} | Best threshold (F2): {best_threshold:.3f}")
+
+    # Save artifacts
+    save_artifact(pipe, "fraud_model.joblib")
+    save_artifact({"feature_order": num_cols, "threshold": best_threshold}, "model_meta.joblib")
+    save_metrics(metrics)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+Real-time inference API
+
+# infer_api.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+import numpy as np
+
+from utils import load_artifact
+
+app = FastAPI(title="Fraud Detection API", version="1.0.0")
+
+pipe = load_artifact("fraud_model.joblib")
+meta = load_artifact("model_meta.joblib")
+feature_order = meta["feature_order"]
+threshold = meta.get("threshold", 0.5)
+
+class Transaction(BaseModel):
+    # Define fields according to your dataset.
+    # For Kaggle creditcard, features are V1..V28 + 'Time' and 'Amount'.
+    # Example below for Amount and a few anonymized features:
+    Amount: float
+    Time: float = 0.0
+    V1: float = 0.0
+    V2: float = 0.0
+    V3: float = 0.0
+    V4: float = 0.0
+    V5: float = 0.0
+    V6: float = 0.0
+    V7: float = 0.0
+    V8: float = 0.0
+    V9: float = 0.0
+    V10: float = 0.0
+    V11: float = 0.0
+    V12: float = 0.0
+    V13: float = 0.0
+    V14: float = 0.0
+    V15: float = 0.0
+    V16: float = 0.0
+    V17: float = 0.0
+    V18: float = 0.0
+    V19: float = 0.0
+    V20: float = 0.0
+    V21: float = 0.0
+    V22: float = 0.0
+    V23: float = 0.0
+    V24: float = 0.0
+    V25: float = 0.0
+    V26: float = 0.0
+    V27: float = 0.0
+    V28: float = 0.0
+
+@app.post("/score")
+def score(tx: Transaction):
+    # Align features in the training order
+    x = np.array([[getattr(tx, f) for f in feature_order]], dtype=float)
+    prob = float(pipe.predict_proba(x)[0, 1])
+    label = int(prob >= threshold)
+    return {
+        "fraud_probability": prob,
+        "fraud_label": label,
+        "threshold": threshold
+    }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+
+
+Requirements
+# requirements.txt
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.2
+joblib==1.4.2
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+
+
+Running the pipeline
+Prepare data:
+
+Place your CSV at data/creditcard.csv (or pass --csv to train.py).
+
+Ensure the target is binary (0/1) and named as you set via --target.
+
+Train:
+
+python train.py --use_class_weight --undersample
+
+Artifacts saved in artifacts/ (model, meta, metrics.json).
+
+Serve:
+
+uvicorn infer_api:app --host 0.0.0.0 --port 8000
+
+POST to /score with JSON matching your feature schema.
+
+
+
+
+
+
+Notes and extensions
+Feature engineering:
+
+Time-of-day, merchant category, country mismatch, velocity features (e.g., rolling sums per card).
+
+Models:
+
+Try GradientBoosting, XGBoost, LightGBM, or IsolationForest for anomaly detection; calibrate outputs.
+
+Evaluation:
+
+Prefer PR-AUC and recall at fixed precision for highly imbalanced tasks.
+
+Thresholding:
+
+Use business cost matrix (false negatives often cost more than false positives). Tune per segment.
+
+Production:
+
+Monitor drift, retrain periodically, add explainability (SHAP), and implement safeguards for high-risk decisions.
