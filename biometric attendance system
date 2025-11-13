@@ -1,0 +1,309 @@
+Project structure
+data/encodings/: Serialized face encodings per user
+
+db/attendance.db: SQLite database
+
+enroll.py: Register new users
+
+attend.py: Run attendance capture
+
+export_csv.py: Export attendance to CSV
+
+utils/db.py: DB helpers
+
+requirements.txt: Dependencies
+
+
+Database helpers
+# utils/db.py
+import os
+import sqlite3
+
+DB_PATH = os.path.join("db", "attendance.db")
+
+def init_db():
+    os.makedirs("db", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        encoding_path TEXT NOT NULL
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS attendance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        source TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+def get_conn():
+    return sqlite3.connect(DB_PATH)
+
+def add_user(name: str, encoding_path: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO users (name, encoding_path) VALUES (?, ?)", (name, encoding_path))
+    conn.commit()
+    conn.close()
+
+def get_users():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, encoding_path FROM users")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def log_attendance(user_id: int, timestamp: str, source: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO attendance (user_id, timestamp, source) VALUES (?, ?, ?)",
+                (user_id, timestamp, source))
+    conn.commit()
+    conn.close()
+
+
+
+
+Enrollment script
+# enroll.py
+import os
+import uuid
+import time
+from datetime import datetime
+import cv2
+import face_recognition
+import numpy as np
+from utils.db import init_db, add_user
+
+ENC_DIR = os.path.join("data", "encodings")
+os.makedirs(ENC_DIR, exist_ok=True)
+
+def capture_face():
+    cap = cv2.VideoCapture(0)
+    print("Press 'c' to capture, 'q' to quit.")
+    face_image = None
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Camera frame not available.")
+            break
+        cv2.imshow("Enrollment - Frame", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('c'):
+            face_image = frame.copy()
+            break
+        elif key == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    return face_image
+
+def extract_encoding(image):
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    boxes = face_recognition.face_locations(rgb, model="hog")  # fast; use "cnn" for accuracy
+    if not boxes:
+        raise ValueError("No face detected. Try again with proper lighting and framing.")
+    # Use the largest face (closest)
+    h, w = image.shape[:2]
+    areas = [abs((b[2]-b[0]) * (b[1]-b[3])) for b in boxes]
+    box = boxes[int(np.argmax(areas))]
+    encs = face_recognition.face_encodings(rgb, [box])
+    if not encs:
+        raise ValueError("Failed to compute face encoding.")
+    return encs[0]
+
+def main():
+    init_db()
+    name = input("Enter person's full name: ").strip()
+    if not name:
+        print("Name required.")
+        return
+    print("Align yourself in front of the camera. Ensure good lighting.")
+    time.sleep(1)
+    img = capture_face()
+    if img is None:
+        print("Enrollment canceled.")
+        return
+    try:
+        enc = extract_encoding(img)
+    except Exception as e:
+        print("Error:", e)
+        return
+    enc_path = os.path.join(ENC_DIR, f"{uuid.uuid4().hex}.npy")
+    np.save(enc_path, enc)
+    add_user(name, enc_path)
+    print(f"Enrollment complete for {name} at {datetime.now().isoformat()}.")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+Attendance capture
+# attend.py
+import os
+from datetime import datetime, timezone
+import cv2
+import face_recognition
+import numpy as np
+from utils.db import init_db, get_users, log_attendance
+
+MATCH_TOLERANCE = 0.5  # lower is stricter; typical 0.4–0.6
+DEBOUNCE_SECONDS = 20  # prevent repeated logs for same person too quickly
+
+def load_known_faces():
+    known_encodings = []
+    known_meta = []
+    for user_id, name, enc_path in get_users():
+        if not os.path.exists(enc_path):
+            print(f"Warning: encoding missing for {name} ({enc_path})")
+            continue
+        enc = np.load(enc_path)
+        known_encodings.append(enc)
+        known_meta.append((user_id, name))
+    return known_encodings, known_meta
+
+def main():
+    init_db()
+    known_encodings, known_meta = load_known_faces()
+    if not known_encodings:
+        print("No enrolled users. Run enroll.py first.")
+        return
+
+    cap = cv2.VideoCapture(0)
+    last_seen = {}  # user_id -> timestamp
+
+    print("Press 'q' to quit.")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Camera frame not available.")
+            break
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        boxes = face_recognition.face_locations(rgb, model="hog")
+        encs = face_recognition.face_encodings(rgb, boxes)
+
+        for (top, right, bottom, left), enc in zip(boxes, encs):
+            distances = face_recognition.face_distance(known_encodings, enc)
+            if len(distances) == 0:
+                continue
+            best_idx = int(np.argmin(distances))
+            best_dist = distances[best_idx]
+            if best_dist <= MATCH_TOLERANCE:
+                user_id, name = known_meta[best_idx]
+                now = datetime.now(timezone.utc)
+                last = last_seen.get(user_id)
+                if not last or (now - last).total_seconds() > DEBOUNCE_SECONDS:
+                    log_attendance(user_id, now.isoformat(), source="camera_01")
+                    last_seen[user_id] = now
+                    label = f"{name} ✓ ({best_dist:.2f})"
+                else:
+                    label = f"{name} ({best_dist:.2f})"
+            else:
+                label = "Unknown"
+
+            # Draw UI
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            cv2.rectangle(frame, (left, bottom - 20), (right, bottom), (0, 255, 0), cv2.FILLED)
+            cv2.putText(frame, label, (left + 4, bottom - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+
+        cv2.imshow("Attendance", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+CSV export# export_csv.py
+import csv
+from utils.db import get_conn
+
+def export(file_path="attendance_export.csv"):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT a.id, u.name, a.timestamp, a.source
+    FROM attendance a
+    JOIN users u ON a.user_id = u.id
+    ORDER BY datetime(a.timestamp) ASC;
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["attendance_id", "name", "timestamp", "source"])
+        for r in rows:
+            writer.writerow(r)
+    print(f"Exported {len(rows)} records to {file_path}")
+
+if __name__ == "__main__":
+    export()
+
+
+
+
+Requirements
+text
+# requirements.txt
+opencv-python==4.10.0.84
+face_recognition==1.3.0
+numpy==1.26.4
+Note: On some systems, installing dlib (used by face_recognition) might require build tools. If installation is tricky, consider mediapipe + custom embeddings or DeepFace.
+
+
+
+Running the system
+Create folders:
+
+data/encodings
+
+db
+
+Install dependencies:
+
+python -m venv .venv && source .venv/bin/activate (Linux/macOS)
+
+.venv\Scripts\activate (Windows)
+
+pip install -r requirements.txt
+
+Enroll users:
+
+python enroll.py
+
+Capture face; repeat for each person.
+
+Run attendance:
+
+python attend.py
+
+Face recognized events will be logged automatically.
+
+Export report:
+
+python export_csv.py
+
+
+
