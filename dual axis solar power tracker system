@@ -1,0 +1,331 @@
+System overview
+Sensors: Four LDRs placed around the panel (North-West, North-East, South-West, South-East) forming a cross with a small sun shield to create measurable gradients.
+
+Actuators: Two servos via PCA9685 (I2C PWM) or two steppers via A4988/DRV8825 drivers.
+
+Controller: Raspberry Pi reading ADC (MCP3008), computing errors, and driving motors with a PID loop.
+
+Features: Calibration limits, deadband, slew-rate limiting, and safe homing on startup/shutdown.
+
+Tip: Mount a small sun “shroud” across the LDR array so differences are pronounced when misaligned.
+
+1) Wiring assumptions
+MCP3008 (ADC): Connected over SPI to read 4 LDR channels.
+CH0: NW, CH1: NE, CH2: SW, CH3: SE
+
+PCA9685 (PWM): Servo 0 for azimuth, Servo 1 for elevation.
+
+Power: External 5–6V for servos; common ground with Pi.
+
+Safety: Mechanical end stops or limit switches wired to GPIO (optional but recommended)
+
+
+
+PID controller helper
+# pid.py
+class PID:
+    def __init__(self, kp=0.5, ki=0.0, kd=0.05, out_min=-1.0, out_max=1.0):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.out_min = out_min
+        self.out_max = out_max
+        self._prev_err = 0.0
+        self._int = 0.0
+
+    def reset(self):
+        self._prev_err = 0.0
+        self._int = 0.0
+
+    def step(self, err, dt):
+        self._int += err * dt
+        der = (err - self._prev_err) / dt if dt > 0 else 0.0
+        self._prev_err = err
+        out = self.kp * err + self.ki * self._int + self.kd * der
+        return max(self.out_min, min(self.out_max, out))
+
+
+
+Hardware interface modules
+
+# sensors.py
+import time
+import spidev
+
+class MCP3008:
+    def __init__(self, bus=0, device=0, max_speed_hz=1_000_000):
+        self.spi = spidev.SpiDev()
+        self.spi.open(bus, device)
+        self.spi.max_speed_hz = max_speed_hz
+        self.spi.mode = 0
+
+    def read_channel(self, ch):
+        # MCP3008 protocol: start bit, single-ended, channel
+        r = self.spi.xfer2([1, (8 + ch) << 4, 0])
+        val = ((r[1] & 3) << 8) | r[2]
+        return val  # 0..1023
+
+    def read_quadrant(self):
+        # Returns NW, NE, SW, SE
+        return (
+            self.read_channel(0),
+            self.read_channel(1),
+            self.read_channel(2),
+            self.read_channel(3),
+        )
+
+    def close(self):
+        self.spi.close()
+
+def normalize_adc(val, vref=1023.0):
+    return min(1.0, max(0.0, val / vref))
+
+
+# actuators.py
+import time
+
+# Choose one of the actuator drivers below:
+
+# --- PCA9685 servos ---
+try:
+    from adafruit_servokit import ServoKit
+    _HAVE_SERVO = True
+except Exception:
+    _HAVE_SERVO = False
+
+class DualServo:
+    def __init__(self, channels=(0, 1), freq=50):
+        if not _HAVE_SERVO:
+            raise RuntimeError("ServoKit not available. Install adafruit-circuitpython-servokit.")
+        self.kit = ServoKit(channels=16)
+        self.az_ch, self.el_ch = channels
+        # Default servo angles
+        self.az_angle = 90.0
+        self.el_angle = 45.0
+        self.set_angles(self.az_angle, self.el_angle)
+
+    def set_angles(self, az_deg, el_deg):
+        self.az_angle = max(0, min(180, az_deg))
+        self.el_angle = max(0, min(180, el_deg))
+        self.kit.servo[self.az_ch].angle = int(self.az_angle)
+        self.kit.servo[self.el_ch].angle = int(self.el_angle)
+
+    def nudge(self, d_az, d_el, max_step=2.0):
+        d_az = max(-max_step, min(max_step, d_az))
+        d_el = max(-max_step, min(max_step, d_el))
+        self.set_angles(self.az_angle + d_az, self.el_angle + d_el)
+
+# --- A4988/DRV8825 stepper (simple step/dir GPIO) ---
+import RPi.GPIO as GPIO
+
+class StepperAxis:
+    def __init__(self, pin_dir, pin_step, steps_per_deg=10, invert=False):
+        self.pin_dir = pin_dir
+        self.pin_step = pin_step
+        self.steps_per_deg = steps_per_deg
+        self.invert = invert
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.pin_dir, GPIO.OUT)
+        GPIO.setup(self.pin_step, GPIO.OUT)
+        GPIO.output(self.pin_dir, GPIO.LOW)
+
+    def move_deg(self, deg, step_delay=0.001):
+        steps = int(abs(deg) * self.steps_per_deg)
+        dir_high = (deg > 0)
+        if self.invert:
+            dir_high = not dir_high
+        GPIO.output(self.pin_dir, GPIO.HIGH if dir_high else GPIO.LOW)
+        for _ in range(steps):
+            GPIO.output(self.pin_step, GPIO.HIGH)
+            time.sleep(step_delay)
+            GPIO.output(self.pin_step, GPIO.LOW)
+            time.sleep(step_delay)
+
+    def cleanup(self):
+        GPIO.cleanup()
+
+class DualStepper:
+    def __init__(self, az_dir=20, az_step=21, el_dir=19, el_step=26,
+                 az_steps_per_deg=10, el_steps_per_deg=10):
+        self.az = StepperAxis(az_dir, az_step, az_steps_per_deg)
+        self.el = StepperAxis(el_dir, el_step, el_steps_per_deg)
+        self.az_pos = 0.0
+        self.el_pos = 0.0
+
+    def nudge(self, d_az, d_el, max_step=1.0):
+        d_az = max(-max_step, min(max_step, d_az))
+        d_el = max(-max_step, min(max_step, d_el))
+        self.az.move_deg(d_az)
+        self.el.move_deg(d_el)
+        self.az_pos += d_az
+        self.el_pos += d_el
+
+    def cleanup(self):
+        self.az.cleanup()
+        self.el.cleanup()
+
+
+
+Main tracking control loop
+# tracker.py
+import time
+import math
+from pid import PID
+from sensors import MCP3008, normalize_adc
+from actuators import DualServo, DualStepper
+
+# --- Config ---
+USE_SERVO = True  # set False to use steppers
+DEADBAND = 0.02   # tolerated normalized difference
+SAMPLE_HZ = 10    # control frequency
+MAX_NUDGE_DEG = 2.0  # max degrees per update
+
+# PID gains per axis (tune on your rig)
+AZ_PID = PID(kp=0.8, ki=0.02, kd=0.05, out_min=-5, out_max=5)
+EL_PID = PID(kp=0.9, ki=0.02, kd=0.06, out_min=-5, out_max=5)
+
+def compute_errors(nw, ne, sw, se):
+    # Normalize ADC to 0..1
+    nw, ne, sw, se = map(normalize_adc, (nw, ne, sw, se))
+    # Horizontal (azimuth) error: right minus left
+    left = (nw + sw) / 2.0
+    right = (ne + se) / 2.0
+    az_err = (right - left)
+    # Vertical (elevation) error: top minus bottom
+    top = (nw + ne) / 2.0
+    bottom = (sw + se) / 2.0
+    el_err = (top - bottom)
+    # Overall intensity (for sanity checks)
+    intensity = (nw + ne + sw + se) / 4.0
+    return az_err, el_err, intensity
+
+def main():
+    adc = MCP3008()
+    actuator = DualServo() if USE_SERVO else DualStepper()
+    print("Starting dual-axis tracker...")
+    last = time.time()
+
+    try:
+        while True:
+            t = time.time()
+            dt = t - last
+            if dt <= 0:
+                dt = 1.0 / SAMPLE_HZ
+            last = t
+
+            nw, ne, sw, se = adc.read_quadrant()
+            az_err, el_err, intensity = compute_errors(nw, ne, sw, se)
+
+            # Deadband to avoid jitter
+            if abs(az_err) < DEADBAND:
+                az_err = 0.0
+            if abs(el_err) < DEADBAND:
+                el_err = 0.0
+
+            # PID steps yield desired angle change
+            d_az = AZ_PID.step(az_err, dt)
+            d_el = EL_PID.step(el_err, dt)
+
+            # Scale output to degrees per cycle
+            actuator.nudge(d_az, d_el, max_step=MAX_NUDGE_DEG)
+
+            # Status output
+            print(f"I={intensity:.2f} | az_err={az_err:.3f} el_err={el_err:.3f} "
+                  f"| nudge=({d_az:.2f},{d_el:.2f})")
+
+            time.sleep(max(0, (1.0 / SAMPLE_HZ) - (time.time() - t)))
+    except KeyboardInterrupt:
+        print("Stopping tracker...")
+    finally:
+        try:
+            adc.close()
+        except Exception:
+            pass
+        if not USE_SERVO:
+            try:
+                actuator.cleanup()
+            except Exception:
+                pass
+
+if __name__ == "__main__":
+    main()
+
+
+
+Optional features
+# safety.py
+import RPi.GPIO as GPIO
+
+class LimitSwitches:
+    def __init__(self, az_min=5, az_max=6, el_min=13, el_max=19):
+        self.pins = [az_min, az_max, el_min, el_max]
+        GPIO.setmode(GPIO.BCM)
+        for p in self.pins:
+            GPIO.setup(p, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    def read(self):
+        # returns dict of switch states (True=not pressed, False=pressed)
+        states = {}
+        names = ["az_min","az_max","el_min","el_max"]
+        for name, p in zip(names, self.pins):
+            states[name] = bool(GPIO.input(p))
+        return states
+
+
+
+Requirements
+text
+spidev==3.6
+adafruit-circuitpython-servokit==1.7.6  # for PCA9685 + servos
+RPi.GPIO==0.7.1
+If using steppers via A4988/DRV8825, you only need RPi.GPIO.
+
+If you don’t have hardware yet, you can mock ADC readings and actuator outputs to test PID logic.
+
+
+Tuning and calibration
+Sensor calibration:
+
+Labeling: Ensure NW/NE/SW/SE mapping matches code.
+
+Balance: Use matched LDRs or normalize each channel with per-channel gains.
+
+PID tuning:
+
+Start: Low kp, small kd, ki=0; increase kp until oscillation, then add kd to dampen; add tiny ki to remove bias.
+
+Deadband: Increase DEADBAND if hardware jitters in steady sun.
+
+Mechanical limits:
+
+Servos: Clamp angles to safe ranges (e.g., az 10–170°, el 15–90°).
+
+Steppers: Use limit switches and position counters; add soft limits in code.
+
+
+Simulated test (no hardware)
+
+
+# simulate.py
+import random
+from pid import PID
+
+def simulate_once(az_err, el_err, az_pid, el_pid, dt=0.1):
+    d_az = az_pid.step(az_err, dt)
+    d_el = el_pid.step(el_err, dt)
+    return d_az, d_el
+
+if __name__ == "__main__":
+    az_pid = PID(0.8, 0.02, 0.05, -5, 5)
+    el_pid = PID(0.9, 0.02, 0.06, -5, 5)
+    az_err = 0.5
+    el_err = -0.3
+    for i in range(50):
+        d_az, d_el = simulate_once(az_err, el_err, az_pid, el_pid)
+        # Pretend motion reduces error
+        az_err *= 0.9
+        el_err *= 0.9
+        print(f"step {i}: d_az={d_az:.2f} d_el={d_el:.2f} az_err={az_err:.3f} el_err={el_err:.3f}")
+
+
+
