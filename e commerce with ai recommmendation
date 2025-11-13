@@ -1,0 +1,401 @@
+Setup
+Requirements: Python 3.9+, pip install flask numpy scikit-learn
+
+Run: Save as app.py, then python app.py
+
+Key endpoints:
+
+POST /users, GET /users/<user_id>
+
+POST /products, GET /products
+
+POST /cart/add, POST /cart/remove, GET /cart/<user_id>, POST /checkout
+
+POST /track/view, POST /track/cart
+
+GET /recommend/<user_id>, GET /recommend/similar/<product_id>
+
+
+# app.py
+import json
+import uuid
+from datetime import datetime
+from typing import Dict, Any, List, Tuple
+from collections import defaultdict, Counter
+
+import numpy as np
+from flask import Flask, request, jsonify
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+app = Flask(__name__)
+
+DATA_FILE = "ecom_data.json"
+
+USERS: Dict[str, Dict[str, Any]] = {}
+PRODUCTS: Dict[str, Dict[str, Any]] = {}
+CARTS: Dict[str, Dict[str, Any]] = {}   # user_id -> {"items": {product_id: qty}}
+ORDERS: List[Dict[str, Any]] = []
+BEHAVIOR: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> [{"event": "view|cart|purchase", "product_id": ..., "ts": ...}]
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump({
+            "USERS": USERS,
+            "PRODUCTS": PRODUCTS,
+            "CARTS": CARTS,
+            "ORDERS": ORDERS,
+            "BEHAVIOR": BEHAVIOR
+        }, f, indent=2, default=str)
+
+def load_data():
+    global USERS, PRODUCTS, CARTS, ORDERS, BEHAVIOR
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            USERS = data.get("USERS", {})
+            PRODUCTS = data.get("PRODUCTS", {})
+            CARTS = data.get("CARTS", {})
+            ORDERS = data.get("ORDERS", [])
+            BEHAVIOR = data.get("BEHAVIOR", {})
+    except FileNotFoundError:
+        pass
+
+load_data()
+
+# ---------------------------
+# Helpers
+# ---------------------------
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+def price_band(p: float) -> str:
+    if p < 500: return "low"
+    if p < 2000: return "mid"
+    return "high"
+
+def product_text_feature(prod: Dict[str, Any]) -> str:
+    # Combine metadata into a "document" for TF-IDF
+    tags = " ".join(prod.get("tags", []))
+    band = price_band(float(prod.get("price", 0)))
+    cat = prod.get("category", "")
+    title = prod.get("title", "")
+    return f"{title} {cat} {tags} price_{band}"
+
+def build_content_matrix() -> Tuple[List[str], np.ndarray]:
+    if not PRODUCTS:
+        return [], np.zeros((0, 0))
+    docs = []
+    ids = []
+    for pid, p in PRODUCTS.items():
+        ids.append(pid)
+        docs.append(product_text_feature(p))
+    tfidf = TfidfVectorizer().fit_transform(docs)
+    return ids, tfidf
+
+def log_event(user_id: str, event: str, product_id: str):
+    BEHAVIOR.setdefault(user_id, []).append({
+        "event": event,
+        "product_id": product_id,
+        "ts": datetime.utcnow().isoformat()
+    })
+
+def user_history_vector(user_id: str) -> Counter:
+    # Count views and purchases to weight preferences
+    counts = Counter()
+    for e in BEHAVIOR.get(user_id, []):
+        if e["event"] == "view":
+            counts[e["product_id"]] += 1
+        elif e["event"] == "purchase":
+            counts[e["product_id"]] += 3  # higher weight for purchases
+        elif e["event"] == "cart":
+            counts[e["product_id"]] += 2
+    return counts
+
+def build_item_item_cooccurrence() -> Dict[str, Counter]:
+    # Simple item-item collaborative filtering from user behavior
+    co = defaultdict(Counter)
+    for user_id, events in BEHAVIOR.items():
+        # group products per user session-like: last 50 events
+        items = [e["product_id"] for e in events[-50:]]
+        unique = list(set(items))
+        for i in range(len(unique)):
+            for j in range(i + 1, len(unique)):
+                a, b = unique[i], unique[j]
+                co[a][b] += 1
+                co[b][a] += 1
+    return co
+
+def hybrid_recommend_for_user(user_id: str, k: int = 8) -> List[Dict[str, Any]]:
+    ids, tfidf = build_content_matrix()
+    if not ids:
+        return []
+    id_to_idx = {pid: i for i, pid in enumerate(ids)}
+    sim_content = cosine_similarity(tfidf)
+
+    co = build_item_item_cooccurrence()
+    hist = user_history_vector(user_id)
+    if not hist:
+        # Cold-start: rank by popularity (views/purchases) or newest
+        popularity = Counter()
+        for u, events in BEHAVIOR.items():
+            for e in events:
+                if e["event"] in ("view", "purchase"):
+                    popularity[e["product_id"]] += 1
+        ranked = [pid for pid, _ in popularity.most_common()]
+        # Fill with catalog if needed
+        catalog_rest = [pid for pid in PRODUCTS if pid not in ranked]
+        final = ranked + catalog_rest
+        return [product_card(pid) for pid in final[:k]]
+
+    scores = Counter()
+    # Content-based: for each product user interacted with, add similar ones
+    for pid, weight in hist.items():
+        if pid not in id_to_idx: 
+            continue
+        idx = id_to_idx[pid]
+        sims = sim_content[idx]
+        for j, s in enumerate(sims):
+            if ids[j] == pid:
+                continue
+            scores[ids[j]] += s * (0.6 + 0.1 * min(weight, 5))  # boost by interaction weight
+
+        # Collaborative: co-occurrence neighbors
+        for nbr, c in co.get(pid, {}).items():
+            scores[nbr] += c * 0.4
+
+    # Penalize already purchased heavily, cart mildly
+    purchased = {e["product_id"] for e in BEHAVIOR.get(user_id, []) if e["event"] == "purchase"}
+    in_cart = set(CARTS.get(user_id, {}).get("items", {}).keys())
+    for pid in purchased:
+        scores[pid] *= 0.05
+    for pid in in_cart:
+        scores[pid] *= 0.5
+
+    # Sort and filter unavailable
+    ranked = [pid for pid, sc in scores.most_common() if PRODUCTS.get(pid, {}).get("stock", 0) > 0]
+    return [product_card(pid) for pid in ranked[:k]]
+
+def product_card(pid: str) -> Dict[str, Any]:
+    p = PRODUCTS[pid]
+    return {
+        "product_id": pid,
+        "title": p["title"],
+        "category": p["category"],
+        "price": p["price"],
+        "stock": p["stock"],
+        "tags": p.get("tags", [])
+    }
+
+def similar_products(product_id: str, k: int = 6) -> List[Dict[str, Any]]:
+    ids, tfidf = build_content_matrix()
+    if not ids or product_id not in ids:
+        return []
+    id_to_idx = {pid: i for i, pid in enumerate(ids)}
+    sims = cosine_similarity(tfidf[id_to_idx[product_id]], tfidf)[0]
+    pairs = [(ids[i], sims[i]) for i in range(len(ids)) if ids[i] != product_id]
+    pairs.sort(key=lambda x: x[1], reverse=True)
+    return [product_card(pid) for pid, _ in pairs[:k]]
+
+# ---------------------------
+# Seed demo data (optional)
+# ---------------------------
+if not PRODUCTS:
+    demo = [
+        {"title": "Wireless Earbuds", "category": "Electronics", "price": 1799, "stock": 42, "tags": ["audio", "bluetooth"]},
+        {"title": "Yoga Mat", "category": "Sports", "price": 499, "stock": 120, "tags": ["fitness", "home"]},
+        {"title": "Smartwatch", "category": "Electronics", "price": 3499, "stock": 30, "tags": ["wearable", "health"]},
+        {"title": "Espresso Maker", "category": "Home & Kitchen", "price": 2299, "stock": 15, "tags": ["coffee", "appliance"]},
+        {"title": "Running Shoes", "category": "Sports", "price": 2199, "stock": 65, "tags": ["footwear", "outdoor"]},
+        {"title": "LED Desk Lamp", "category": "Home & Kitchen", "price": 899, "stock": 50, "tags": ["lighting", "desk"]},
+    ]
+    for item in demo:
+        pid = new_id("prod")
+        PRODUCTS[pid] = {"id": pid, **item}
+    save_data()
+
+# ---------------------------
+# API endpoints
+# ---------------------------
+
+@app.route("/users", methods=["POST"])
+def create_user():
+    payload = request.get_json(force=True)
+    user_id = new_id("user")
+    user = {"id": user_id, "name": payload.get("name", "Customer"), "email": payload.get("email", ""), "created_at": datetime.utcnow().isoformat()}
+    USERS[user_id] = user
+    CARTS[user_id] = {"items": {}}
+    BEHAVIOR[user_id] = []
+    save_data()
+    return jsonify(user), 201
+
+@app.route("/users/<user_id>", methods=["GET"])
+def get_user(user_id):
+    u = USERS.get(user_id)
+    if not u:
+        return jsonify({"error": "user not found"}), 404
+    return jsonify(u)
+
+@app.route("/products", methods=["POST"])
+def create_product():
+    payload = request.get_json(force=True)
+    pid = new_id("prod")
+    p = {
+        "id": pid,
+        "title": payload.get("title", "Untitled"),
+        "category": payload.get("category", "Misc"),
+        "price": float(payload.get("price", 0)),
+        "stock": int(payload.get("stock", 0)),
+        "tags": payload.get("tags", [])
+    }
+    PRODUCTS[pid] = p
+    save_data()
+    return jsonify(p), 201
+
+@app.route("/products", methods=["GET"])
+def list_products():
+    return jsonify({"products": list(PRODUCTS.values())})
+
+@app.route("/track/view", methods=["POST"])
+def track_view():
+    payload = request.get_json(force=True)
+    user_id = payload.get("user_id")
+    product_id = payload.get("product_id")
+    if user_id not in USERS or product_id not in PRODUCTS:
+        return jsonify({"error": "user or product not found"}), 404
+    log_event(user_id, "view", product_id)
+    save_data()
+    return jsonify({"status": "logged"})
+
+@app.route("/track/cart", methods=["POST"])
+def track_cart():
+    payload = request.get_json(force=True)
+    user_id = payload.get("user_id")
+    product_id = payload.get("product_id")
+    action = payload.get("action", "add")  # "add" or "remove"
+    if user_id not in USERS or product_id not in PRODUCTS:
+        return jsonify({"error": "user or product not found"}), 404
+    log_event(user_id, "cart", product_id)
+    # Mirror in cart
+    items = CARTS[user_id]["items"]
+    if action == "add":
+        items[product_id] = items.get(product_id, 0) + 1
+    else:
+        if product_id in items:
+            items[product_id] -= 1
+            if items[product_id] <= 0:
+                del items[product_id]
+    save_data()
+    return jsonify({"cart": CARTS[user_id]})
+
+@app.route("/cart/<user_id>", methods=["GET"])
+def get_cart(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    cart = CARTS[user_id]
+    # enrich with product info
+    enriched = []
+    for pid, qty in cart["items"].items():
+        if pid in PRODUCTS:
+            p = PRODUCTS[pid]
+            enriched.append({"product_id": pid, "title": p["title"], "price": p["price"], "qty": qty, "subtotal": round(p["price"] * qty, 2)})
+    total = round(sum(x["subtotal"] for x in enriched), 2)
+    return jsonify({"items": enriched, "total": total})
+
+@app.route("/checkout", methods=["POST"])
+def checkout():
+    payload = request.get_json(force=True)
+    user_id = payload.get("user_id")
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+
+    items = CARTS[user_id]["items"]
+    if not items:
+        return jsonify({"error": "cart empty"}), 400
+
+    # Validate stock
+    for pid, qty in items.items():
+        if PRODUCTS.get(pid, {}).get("stock", 0) < qty:
+            return jsonify({"error": f"insufficient stock for {pid}"}), 400
+
+    # Create order
+    order_id = new_id("order")
+    order_items = []
+    total = 0.0
+    for pid, qty in items.items():
+        p = PRODUCTS[pid]
+        line_total = p["price"] * qty
+        total += line_total
+        order_items.append({"product_id": pid, "title": p["title"], "price": p["price"], "qty": qty, "line_total": round(line_total, 2)})
+
+    order = {
+        "id": order_id,
+        "user_id": user_id,
+        "items": order_items,
+        "total": round(total, 2),
+        "created_at": datetime.utcnow().isoformat()
+    }
+    ORDERS.append(order)
+
+    # Update stock, clear cart, log purchases
+    for pid, qty in items.items():
+        PRODUCTS[pid]["stock"] -= qty
+        for _ in range(qty):
+            log_event(user_id, "purchase", pid)
+    CARTS[user_id]["items"] = {}
+
+    save_data()
+    return jsonify(order)
+
+@app.route("/orders/<user_id>", methods=["GET"])
+def list_orders(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    user_orders = [o for o in ORDERS if o["user_id"] == user_id]
+    return jsonify({"orders": user_orders})
+
+@app.route("/recommend/<user_id>", methods=["GET"])
+def recommend_user(user_id):
+    if user_id not in USERS:
+        return jsonify({"error": "user not found"}), 404
+    recs = hybrid_recommend_for_user(user_id, k=8)
+    return jsonify({"recommendations": recs})
+
+@app.route("/recommend/similar/<product_id>", methods=["GET"])
+def recommend_similar(product_id):
+    if product_id not in PRODUCTS:
+        return jsonify({"error": "product not found"}), 404
+    recs = similar_products(product_id, k=6)
+    return jsonify({"similar": recs})
+
+# ---------------------------
+# Run server
+# ---------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+curl -X POST http://localhost:8000/users \
+ -H "Content-Type: application/json" \
+ -d '{"name":"Aarav","email":"aarav@example.com"}'
+
+curl http://localhost:8000/products
+
+
+curl -X POST http://localhost:8000/track/cart \
+ -H "Content-Type: application/json" \
+ -d '{"user_id":"<USER_ID>","product_id":"<PROD_ID>","action":"add"}'
+
+curl http://localhost:8000/cart/<USER_ID>
+
+
+curl -X POST http://localhost:8000/checkout \
+ -H "Content-Type: application/json" \
+ -d '{"user_id":"<USER_ID>"}'
+
+
+curl http://localhost:8000/recommend/<USER_ID>
+
+
+curl http://localhost:8000/recommend/similar/<PROD_ID>
