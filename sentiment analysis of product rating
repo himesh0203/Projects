@@ -1,0 +1,104 @@
+Approach 1: Rule-based (using TextBlob)
+
+# Sentiment Analysis of Product Ratings using TextBlob
+# Install dependencies first:
+# pip install textblob pandas
+
+from textblob import TextBlob
+import pandas as pd
+
+# Example dataset: product reviews with ratings (1–5 stars)
+data = {
+    "review": [
+        "This product is amazing! Works perfectly.",
+        "Terrible quality, broke after one use.",
+        "Average experience, nothing special.",
+        "I love it! Highly recommend.",
+        "Not worth the money."
+    ],
+    "rating": [5, 1, 3, 5, 2]
+}
+
+df = pd.DataFrame(data)
+
+# Function to calculate sentiment polarity
+def get_sentiment(text):
+    blob = TextBlob(text)
+    return blob.sentiment.polarity  # range: -1 (negative) to +1 (positive)
+
+# Apply sentiment analysis
+df["sentiment_score"] = df["review"].apply(get_sentiment)
+
+# Classify sentiment into Positive / Neutral / Negative
+def classify_sentiment(score):
+    if score > 0.2:
+        return "Positive"
+    elif score < -0.2:
+        return "Negative"
+    else:
+        return "Neutral"
+
+df["sentiment_label"] = df["sentiment_score"].apply(classify_sentiment)
+
+print(df)
+
+
+
+
+Approach 2: Machine Learning (using scikit-learn)
+
+# Sentiment Analysis of Product Ratings using ML
+# Install dependencies first:
+# pip install scikit-learn pandas
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score
+
+# Example dataset
+data = {
+    "review": [
+        "This product is amazing! Works perfectly.",
+        "Terrible quality, broke after one use.",
+        "Average experience, nothing special.",
+        "I love it! Highly recommend.",
+        "Not worth the money."
+    ],
+    "rating": [5, 1, 3, 5, 2]
+}
+
+df = pd.DataFrame(data)
+
+# Convert ratings into sentiment labels
+def rating_to_sentiment(rating):
+    if rating >= 4:
+        return "Positive"
+    elif rating == 3:
+        return "Neutral"
+    else:
+        return "Negative"
+
+df["sentiment"] = df["rating"].apply(rating_to_sentiment)
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(
+    df["review"], df["sentiment"], test_size=0.2, random_state=42
+)
+
+# Vectorize text
+vectorizer = CountVectorizer()
+X_train_vec = vectorizer.fit_transform(X_train)
+X_test_vec = vectorizer.transform(X_test)
+
+# Train Naive Bayes model
+model = MultinomialNB()
+model.fit(X_train_vec, y_train)
+
+# Predict
+y_pred = model.predict(X_test_vec)
+
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Predictions:", y_pred)
+
