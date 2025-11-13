@@ -1,0 +1,272 @@
+Utilities and IOC extraction
+# utils_ioc.py
+import re
+from typing import Dict, List
+
+IOC_PATTERNS = {
+    "ip": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+    "domain": re.compile(r"\b([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b"),
+    "url": re.compile(r"\bhttps?://[^\s]+"),
+    "md5": re.compile(r"\b[a-fA-F0-9]{32}\b"),
+    "sha1": re.compile(r"\b[a-fA-F0-9]{40}\b"),
+    "sha256": re.compile(r"\b[a-fA-F0-9]{64}\b"),
+    "email": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"),
+}
+
+def extract_iocs(text: str) -> Dict[str, List[str]]:
+    results = {}
+    for k, pat in IOC_PATTERNS.items():
+        hits = pat.findall(text)
+        # Basic dedup + normalization
+        hits = list({h.strip(".,;:()[]{}") for h in hits})
+        if hits:
+            results[k] = hits
+    return results
+
+
+Dataset and preprocessing
+# dataset.py
+import csv
+from typing import List, Tuple
+
+def load_cti_csv(path: str) -> Tuple[List[str], List[str]]:
+    """
+    CSV format: text,label
+    label examples: phishing, ransomware, c2, data_exfil, malware_dropper, brute_force
+    """
+    texts, labels = [], []
+    with open(path, newline="", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            t = (row.get("text") or "").strip()
+            l = (row.get("label") or "").strip()
+            if t and l:
+                texts.append(t)
+                labels.append(l)
+    return texts, labels
+
+
+
+Training: threat report classifier and clustering
+# train_cti.py
+import argparse
+from typing import List
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import joblib
+
+from dataset import load_cti_csv
+
+def build_classifier():
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(
+            ngram_range=(1,2),
+            min_df=2,
+            max_df=0.9,
+            sublinear_tf=True
+        )),
+        ("clf", LogisticRegression(max_iter=2000, class_weight="balanced"))
+    ])
+
+def build_clusterer(n_clusters: int = 8):
+    # KMeans over TF-IDF features; number of clusters depends on dataset scale
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(
+            ngram_range=(1,2),
+            min_df=3,
+            max_df=0.95
+        )),
+        ("kmeans", KMeans(n_clusters=n_clusters, n_init=10, random_state=42))
+    ])
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", type=str, default="cti_reports.csv")
+    ap.add_argument("--clusters", type=int, default=8)
+    args = ap.parse_args()
+
+    texts, labels = load_cti_csv(args.csv)
+    X_train, X_test, y_train, y_test = train_test_split(
+        texts, labels, test_size=0.2, random_state=42, stratify=labels
+    )
+
+    clf = build_classifier()
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    print("Classifier performance:\n", classification_report(y_test, y_pred, digits=4))
+
+    # Train clusterer on all texts to discover topical groups
+    clusterer = build_clusterer(args.clusters)
+    clusterer.fit(texts)
+    clusters = clusterer.named_steps["kmeans"].labels_
+    # Compute simple cluster frequencies
+    unique, counts = np.unique(clusters, return_counts=True)
+    print("Cluster sizes:", dict(zip(unique.tolist(), counts.tolist())))
+
+    joblib.dump(clf, "artifacts/cti_classifier.joblib")
+    joblib.dump(clusterer, "artifacts/cti_clusterer.joblib")
+    print("Saved artifacts to artifacts/")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+Real-time scoring API
+# api_cti.py
+from typing import Dict, Any
+from fastapi import FastAPI
+from pydantic import BaseModel
+import joblib
+
+from utils_ioc import extract_iocs
+
+app = FastAPI(title="CTI ML API", version="1.0.0")
+
+clf = joblib.load("artifacts/cti_classifier.joblib")
+clusterer = joblib.load("artifacts/cti_clusterer.joblib")
+
+class CTIRequest(BaseModel):
+    text: str
+
+@app.post("/analyze")
+def analyze(req: CTIRequest) -> Dict[str, Any]:
+    text = req.text.strip()
+    pred_label = clf.predict([text])[0]
+    probs = clf.predict_proba([text])[0]
+    classes = list(clf.classes_)
+    label_probs = {c: float(p) for c, p in zip(classes, probs)}
+
+    # Cluster assignment
+    km = clusterer.named_steps["kmeans"]
+    tfidf = clusterer.named_steps["tfidf"]
+    x = tfidf.transform([text])
+    cluster_id = int(km.predict(x)[0])
+
+    iocs = extract_iocs(text)
+
+    return {
+        "predicted_label": pred_label,
+        "label_probabilities": label_probs,
+        "cluster_id": cluster_id,
+        "iocs": iocs
+    }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+
+
+Example phishing URL classifier (optional module)
+# url_model.py
+import argparse
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report
+from sklearn.linear_model import LogisticRegression
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+def url_feats(urls):
+    # Simple lexical features: length, digits ratio, suspicious tokens
+    def features(u: str):
+        l = len(u)
+        digits = sum(ch.isdigit() for ch in u)
+        tokens = ["login", "update", "verify", "secure", "account", "ebay", "paypal"]
+        tok_hits = sum(t in u.lower() for t in tokens)
+        return [l, digits / (l + 1e-6), tok_hits]
+    return [[*features(u)] for u in urls]
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", type=str, default="urls.csv")  # columns: url,label (0/1)
+    args = ap.parse_args()
+
+    df = pd.read_csv(args.csv)
+    X_text = df["url"].astype(str).tolist()
+    y = df["label"].astype(int).values
+
+    # Combine TF-IDF over character n-grams with simple lexical features
+    char_tfidf = TfidfVectorizer(analyzer="char", ngram_range=(3,5), min_df=2, max_df=0.95)
+    lex = FunctionTransformer(url_feats)
+
+    # Parallel features via ColumnTransformer-like approach using FeatureUnion
+    from sklearn.pipeline import FeatureUnion
+    union = FeatureUnion([
+        ("char", Pipeline([("tfidf", char_tfidf)])),
+        ("lex", Pipeline([("lex", lex)]))
+    ])
+
+    pipe = Pipeline([
+        ("features", union),
+        ("clf", LogisticRegression(max_iter=2000, class_weight="balanced"))
+    ])
+
+    X_train, X_test, y_train, y_test = train_test_split(X_text, y, test_size=0.2, random_state=42, stratify=y)
+    pipe.fit(X_train, y_train)
+    y_pred = pipe.predict(X_test)
+    print(classification_report(y_test, y_pred, digits=4))
+    import joblib
+    joblib.dump(pipe, "artifacts/url_phishing_model.joblib")
+    print("Saved artifacts/url_phishing_model.joblib")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+Requirements and running
+text
+# requirements.txt
+scikit-learn==1.5.2
+joblib==1.4.2
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pandas==2.2.2
+numpy==1.26.4
+
+
+
+Prepare data:
+
+Create cti_reports.csv with headers text,label and labeled CTI narratives.
+
+Optionally, create urls.csv with headers url,label (1=phishing, 0=benign).
+
+Train models:
+
+python train_cti.py --csv cti_reports.csv --clusters 8
+
+(Optional) python url_model.py --csv urls.csv
+
+Serve API:
+
+uvicorn api_cti:app --host 0.0.0.0 --port 8000
+
+POST /analyze with JSON: {"text": "Observed phishing email linking to http://login.verify-secure-example.com ..."}
+
+Extend and harden:
+
+Feature engineering: Add CTI-specific lexicons (TTPs, MITRE ATT&CK IDs), n-gram phrases, and contextual cues.
+
+IOC validation: Ping passive DNS, WHOIS, and malware sandboxes; add ASN/country metadata.
+
+Clustering: Use HDBSCAN for variable-density; label clusters by top terms.
+
+Modeling: Try LinearSVM, XGBoost, or transformer embeddings (e.g., sentence-BERT).
+
+Ops: Add versioned artifacts, monitoring, and periodic retraining with feedback from analysts.
+
+
+
