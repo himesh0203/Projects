@@ -1,0 +1,322 @@
+Setup
+Requirements: Python 3.9+, pip install flask cryptography
+
+Run: Save as app.py, then python app.py
+
+Endpoints:
+
+POST /issuer/init
+
+POST /cert/issue
+
+GET /cert/verify/<cert_id>
+
+GET /cert/<cert_id>
+
+GET /chain/validate
+
+
+
+# app.py
+import json
+import time
+import uuid
+import hashlib
+from dataclasses import dataclass, asdict
+from typing import List, Dict, Any, Optional
+
+from flask import Flask, request, jsonify
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.exceptions import InvalidSignature
+
+app = Flask(__name__)
+
+# -----------------------
+# Blockchain primitives
+# -----------------------
+
+@dataclass
+class Transaction:
+    type: str                      # "CERT_ISSUE"
+    cert_id: str
+    payload_hash: str              # SHA-256 of certificate payload
+    issuer_pub_pem: str            # PEM-form public key
+    issuer_signature_b64: str      # Base64 of signature over payload_hash
+
+@dataclass
+class Block:
+    index: int
+    timestamp: float
+    transactions: List[Transaction]
+    prev_hash: str
+    nonce: int
+    hash: str
+
+class Blockchain:
+    def __init__(self, difficulty: int = 3):
+        self.chain: List[Block] = []
+        self.pending: List[Transaction] = []
+        self.difficulty = difficulty
+        self.create_genesis_block()
+
+    def create_genesis_block(self):
+        genesis = Block(
+            index=0,
+            timestamp=time.time(),
+            transactions=[],
+            prev_hash="0" * 64,
+            nonce=0,
+            hash=""
+        )
+        genesis.hash = self.compute_hash(genesis)
+        self.chain.append(genesis)
+
+    def compute_hash(self, block: Block) -> str:
+        block_dict = {
+            "index": block.index,
+            "timestamp": block.timestamp,
+            "transactions": [asdict(t) for t in block.transactions],
+            "prev_hash": block.prev_hash,
+            "nonce": block.nonce,
+        }
+        block_str = json.dumps(block_dict, sort_keys=True)
+        return hashlib.sha256(block_str.encode()).hexdigest()
+
+    def proof_of_work(self, block: Block) -> str:
+        target = "0" * self.difficulty
+        while True:
+            h = self.compute_hash(block)
+            if h.startswith(target):
+                return h
+            block.nonce += 1
+
+    def add_block(self, transactions: List[Transaction]) -> Block:
+        prev = self.chain[-1]
+        new_block = Block(
+            index=prev.index + 1,
+            timestamp=time.time(),
+            transactions=transactions,
+            prev_hash=prev.hash,
+            nonce=0,
+            hash=""
+        )
+        new_hash = self.proof_of_work(new_block)
+        new_block.hash = new_hash
+        self.chain.append(new_block)
+        return new_block
+
+    def add_transaction(self, tx: Transaction):
+        self.pending.append(tx)
+        # For simplicity, mine immediately when at least 1 tx pending
+        if len(self.pending) >= 1:
+            self.add_block(self.pending)
+            self.pending = []
+
+    def validate_chain(self) -> bool:
+        for i in range(1, len(self.chain)):
+            prev = self.chain[i-1]
+            cur = self.chain[i]
+            if cur.prev_hash != prev.hash:
+                return False
+            if self.compute_hash(cur) != cur.hash:
+                return False
+            if not cur.hash.startswith("0" * self.difficulty):
+                return False
+        return True
+
+# -----------------------
+# Issuer registry
+# -----------------------
+
+ISSUER_KEYPAIR: Optional[Dict[str, Any]] = None  # {"private": RSAPrivateKey, "public_pem": str}
+CERT_INDEX: Dict[str, Dict[str, Any]] = {}       # cert_id -> stored payload and metadata
+
+def create_issuer_keypair() -> Dict[str, Any]:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    public_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    return {"private": private_key, "public_pem": public_pem}
+
+def sign_hash(private_key, hash_hex: str) -> str:
+    data = bytes.fromhex(hash_hex)
+    signature = private_key.sign(
+        data,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+    import base64
+    return base64.b64encode(signature).decode()
+
+def verify_signature(public_pem: str, hash_hex: str, signature_b64: str) -> bool:
+    import base64
+    data = bytes.fromhex(hash_hex)
+    signature = base64.b64decode(signature_b64)
+    pub = serialization.load_pem_public_key(public_pem.encode())
+    try:
+        pub.verify(
+            signature,
+            data,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256()
+        )
+        return True
+    except InvalidSignature:
+        return False
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+# -----------------------
+# Initialize blockchain
+# -----------------------
+
+BC = Blockchain(difficulty=3)
+
+# -----------------------
+# Flask API
+# -----------------------
+
+@app.route("/issuer/init", methods=["POST"])
+def issuer_init():
+    global ISSUER_KEYPAIR
+    ISSUER_KEYPAIR = create_issuer_keypair()
+    return jsonify({"issuer_public_key_pem": ISSUER_KEYPAIR["public_pem"]})
+
+@app.route("/cert/issue", methods=["POST"])
+def cert_issue():
+    # Payload example:
+    # {
+    #   "student_name": "Aanya Sharma",
+    #   "course": "Blockchain 101",
+    #   "issuer": "Panvel Institute",
+    #   "issued_on": "2025-11-13",
+    #   "metadata": {"grade": "A"}
+    # }
+    if ISSUER_KEYPAIR is None:
+        return jsonify({"error": "Issuer not initialized. POST /issuer/init first."}), 400
+
+    payload = request.get_json(force=True)
+    serialized = json.dumps(payload, sort_keys=True).encode()
+    payload_hash = sha256_hex(serialized)
+
+    cert_id = str(uuid.uuid4())
+    signature_b64 = sign_hash(ISSUER_KEYPAIR["private"], payload_hash)
+
+    tx = Transaction(
+        type="CERT_ISSUE",
+        cert_id=cert_id,
+        payload_hash=payload_hash,
+        issuer_pub_pem=ISSUER_KEYPAIR["public_pem"],
+        issuer_signature_b64=signature_b64
+    )
+
+    # Index certificate for quick retrieval (off-chain cache)
+    CERT_INDEX[cert_id] = {
+        "payload": payload,
+        "payload_hash": payload_hash,
+        "issuer_pub_pem": ISSUER_KEYPAIR["public_pem"],
+        "issuer_signature_b64": signature_b64
+    }
+
+    BC.add_transaction(tx)
+
+    return jsonify({
+        "cert_id": cert_id,
+        "payload_hash": payload_hash,
+        "issuer_public_key_pem": ISSUER_KEYPAIR["public_pem"],
+        "signature_b64": signature_b64,
+        "chain_height": len(BC.chain)
+    })
+
+@app.route("/cert/<cert_id>", methods=["GET"])
+def cert_get(cert_id):
+    record = CERT_INDEX.get(cert_id)
+    if not record:
+        return jsonify({"error": "Certificate not found"}), 404
+    return jsonify({"cert_id": cert_id, **record})
+
+@app.route("/cert/verify/<cert_id>", methods=["GET"])
+def cert_verify(cert_id):
+    record = CERT_INDEX.get(cert_id)
+    if not record:
+        return jsonify({"valid": False, "reason": "Not found"})
+
+    # 1) Check transaction exists on-chain
+    tx_found = False
+    tx_obj: Optional[Transaction] = None
+    for block in BC.chain:
+        for t in block.transactions:
+            if t.cert_id == cert_id and t.payload_hash == record["payload_hash"]:
+                tx_found = True
+                tx_obj = t
+                break
+        if tx_found:
+            break
+
+    if not tx_found:
+        return jsonify({"valid": False, "reason": "Not anchored on-chain"})
+
+    # 2) Validate chain integrity
+    chain_ok = BC.validate_chain()
+    if not chain_ok:
+        return jsonify({"valid": False, "reason": "Chain invalid"})
+
+    # 3) Validate signature
+    sig_ok = verify_signature(
+        record["issuer_pub_pem"],
+        record["payload_hash"],
+        record["issuer_signature_b64"]
+    )
+    if not sig_ok:
+        return jsonify({"valid": False, "reason": "Invalid issuer signature"})
+
+    # 4) Recompute hash of current payload (ensure off-chain payload not tampered)
+    recomputed = sha256_hex(json.dumps(record["payload"], sort_keys=True).encode())
+    if recomputed != record["payload_hash"]:
+        return jsonify({"valid": False, "reason": "Payload mismatch"})
+
+    return jsonify({
+        "valid": True,
+        "anchored_block_index": next((b.index for b in BC.chain if tx_obj in b.transactions), None),
+        "payload_hash": record["payload_hash"]
+    })
+
+@app.route("/chain/validate", methods=["GET"])
+def chain_validate():
+    ok = BC.validate_chain()
+    return jsonify({"chain_height": len(BC.chain), "valid": ok})
+
+# -----------------------
+# Run server
+# -----------------------
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
+
+
+
+curl -X POST http://localhost:8000/issuer/init
+
+
+
+curl -X POST http://localhost:8000/cert/issue \
+ -H "Content-Type: application/json" \
+ -d '{"student_name":"Aanya Sharma","course":"Blockchain 101","issuer":"Panvel Institute","issued_on":"2025-11-13","metadata":{"grade":"A"}}'
+
+
+
+
+curl http://localhost:8000/cert/verify/<CERT_ID>
+
+
+
+curl http://localhost:8000/cert/<CERT_ID>
+
+
+
+
+curl http://localhost:8000/chain/validate
