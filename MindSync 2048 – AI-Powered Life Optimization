@@ -1,0 +1,106 @@
+import random
+
+SIZE = 4
+
+class MindSync2048:
+    def __init__(self):
+        self.board = [[0]*SIZE for _ in range(SIZE)]
+        self.energy = 50
+        self.focus = 50
+        self.points = 0
+        self.add_new_tile()
+        self.add_new_tile()
+
+    def add_new_tile(self):
+        empty = [(i,j) for i in range(SIZE) for j in range(SIZE) if self.board[i][j]==0]
+        if empty:
+            i,j = random.choice(empty)
+            self.board[i][j] = 2
+
+    def compress(self, row):
+        new_row = [i for i in row if i != 0]
+        new_row += [0]*(SIZE - len(new_row))
+        return new_row
+
+    def merge(self, row):
+        for i in range(SIZE-1):
+            if row[i] != 0 and row[i] == row[i+1]:
+                row[i] *= 2
+                row[i+1] = 0
+                self.points += row[i]
+                self.energy += row[i]//4
+                self.focus += row[i]//4
+        return row
+
+    def move_left(self):
+        for i in range(SIZE):
+            self.board[i] = self.compress(self.board[i])
+            self.board[i] = self.merge(self.board[i])
+            self.board[i] = self.compress(self.board[i])
+
+    def move_right(self):
+        for i in range(SIZE):
+            self.board[i] = list(reversed(self.board[i]))
+            self.board[i] = self.compress(self.board[i])
+            self.board[i] = self.merge(self.board[i])
+            self.board[i] = self.compress(self.board[i])
+            self.board[i] = list(reversed(self.board[i]))
+
+    def transpose(self):
+        self.board = [list(row) for row in zip(*self.board)]
+
+    def move_up(self):
+        self.transpose()
+        self.move_left()
+        self.transpose()
+
+    def move_down(self):
+        self.transpose()
+        self.move_right()
+        self.transpose()
+
+    def display(self):
+        print("\n" + "="*30)
+        print("=== MindSync 2048 – Optimize Your Life ===")
+        print(f"Energy: {self.energy} | Focus: {self.focus} | Productivity Points: {self.points}\n")
+        for row in self.board:
+            print("\t".join(str(num) if num!=0 else '.' for num in row))
+        print("\nUse W/A/S/D to move tiles. Merge tasks to optimize life!\n")
+        print("="*30 + "\n")
+
+    def is_game_over(self):
+        for i in range(SIZE):
+            for j in range(SIZE):
+                if self.board[i][j]==0:
+                    return False
+                if i<SIZE-1 and self.board[i][j]==self.board[i+1][j]:
+                    return False
+                if j<SIZE-1 and self.board[i][j]==self.board[i][j+1]:
+                    return False
+        return True
+
+    def play(self):
+        while True:
+            self.display()
+            move = input("Enter move (W/A/S/D): ").upper()
+            if move == 'W':
+                self.move_up()
+            elif move == 'S':
+                self.move_down()
+            elif move == 'A':
+                self.move_left()
+            elif move == 'D':
+                self.move_right()
+            else:
+                print("Invalid input!")
+                continue
+            self.add_new_tile()
+            if self.is_game_over() or self.energy <=0 or self.focus<=0:
+                self.display()
+                print("💥 Game Over! Optimize better next time.")
+                print(f"Total Productivity Points: {self.points}")
+                break
+
+# Run the game
+game = MindSync2048()
+game.play()
