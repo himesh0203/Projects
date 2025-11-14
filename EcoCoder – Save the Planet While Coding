@@ -1,0 +1,66 @@
+import random
+import time
+
+class EcoCoder:
+    def __init__(self):
+        self.city_energy = 100  # Total energy
+        self.points = 0
+        self.day = 1
+
+    def display_status(self):
+        print(f"\n🌍 Day {self.day}: City Energy: {self.city_energy} | Eco Points: {self.points}")
+
+    def take_action(self):
+        print("\nChoose an action to improve your city and reduce tech waste:")
+        print("1. Upgrade servers to energy-efficient ones (-10 energy, +20 points)")
+        print("2. Plant digital trees in server farm (-5 energy, +10 points)")
+        print("3. Leave systems idle (no points, -15 energy)")
+        print("4. Optimize code for efficiency (-8 energy, +15 points)")
+
+        choice = input("Enter your choice (1-4): ")
+
+        if choice == "1":
+            self.city_energy -= 10
+            self.points += 20
+            print("💡 Servers upgraded! Energy used, but points gained.")
+        elif choice == "2":
+            self.city_energy -= 5
+            self.points += 10
+            print("🌱 Digital trees planted! Eco points increased.")
+        elif choice == "3":
+            self.city_energy -= 15
+            print("⏳ Systems idle... Energy wasted, no points gained.")
+        elif choice == "4":
+            self.city_energy -= 8
+            self.points += 15
+            print("🖥️ Code optimized! Energy saved and points earned.")
+        else:
+            print("❌ Invalid choice, nothing happened.")
+
+        # Random events
+        event_chance = random.randint(1, 5)
+        if event_chance == 1:
+            self.city_energy -= 5
+            print("⚡ Unexpected server overload! Energy lost.")
+
+    def check_game_over(self):
+        if self.city_energy <= 0:
+            print("\n💥 Energy depleted! Your city has gone offline.")
+            print(f"🏆 Total Eco Points: {self.points}")
+            return True
+        return False
+
+    def play(self):
+        print("=== 🌿 EcoCoder – Build a Green Tech City While Learning 🌿 ===")
+        while True:
+            self.display_status()
+            self.take_action()
+            if self.check_game_over():
+                break
+            self.day += 1
+            time.sleep(1)  # small pause for readability
+
+
+# Run the game
+game = EcoCoder()
+game.play()
