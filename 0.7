@@ -1,0 +1,111 @@
+import random
+import time
+
+class AILifeMentor:
+    def __init__(self):
+        self.energy = 50
+        self.focus = 50
+        self.productivity = 0
+        self.happiness = 50
+        self.day = 1
+
+    def display_status(self):
+        print("\n" + "="*40)
+        print(f"🌞 Day {self.day} Status")
+        print(f"Energy: {self.energy} | Focus: {self.focus} | Productivity: {self.productivity} | Happiness: {self.happiness}")
+        print("="*40)
+
+    def choose_activity(self):
+        print("\nChoose your daily activity:")
+        print("1. Exercise 🏃 (+15 Energy, -5 Focus, +10 Productivity, +5 Happiness)")
+        print("2. Meditate 🧘 (+10 Focus, -5 Energy, +5 Productivity, +10 Happiness)")
+        print("3. Learn a skill 📚 (+10 Productivity, -10 Energy, -5 Focus, +5 Happiness)")
+        print("4. Rest 😴 (+20 Energy, +10 Focus, 0 Productivity, +10 Happiness)")
+        print("5. Socialize 🗣️ (+5 Energy, +10 Focus, +5 Productivity, +15 Happiness)")
+
+        choice = input("Enter 1-5: ")
+
+        if choice == '1':
+            self.energy += 15
+            self.focus -= 5
+            self.productivity += 10
+            self.happiness += 5
+            print("🏃 You exercised! Energy boosted, slight focus drop.")
+        elif choice == '2':
+            self.focus += 10
+            self.energy -= 5
+            self.productivity += 5
+            self.happiness += 10
+            print("🧘 You meditated! Mind and happiness increased.")
+        elif choice == '3':
+            self.productivity += 10
+            self.energy -= 10
+            self.focus -= 5
+            self.happiness += 5
+            print("📚 You learned something new! Productivity up, energy down.")
+        elif choice == '4':
+            self.energy += 20
+            self.focus += 10
+            self.happiness += 10
+            print("😴 You rested! Energy, focus, and happiness increased.")
+        elif choice == '5':
+            self.energy += 5
+            self.focus += 10
+            self.productivity += 5
+            self.happiness += 15
+            print("🗣️ You socialized! Happiness boosted greatly.")
+        else:
+            print("❌ Invalid choice, nothing happened.")
+
+        # Clamp stats between 0 and 100
+        self.energy = max(0, min(100, self.energy))
+        self.focus = max(0, min(100, self.focus))
+        self.happiness = max(0, min(100, self.happiness))
+
+        # Random life events
+        event = random.randint(1, 5)
+        if event == 1:
+            self.focus -= 5
+            print("⚠️ Stressful news! Focus decreased slightly.")
+        elif event == 2:
+            self.energy -= 5
+            print("⚠️ Busy commute! Energy decreased slightly.")
+
+    def check_game_over(self):
+        if self.energy <= 0:
+            print("\n💤 You collapsed from exhaustion! Game Over.")
+            return True
+        if self.focus <= 0:
+            print("\n💔 Mental burnout! Game Over.")
+            return True
+        if self.happiness <= 0:
+            print("\n😢 Total unhappiness! Game Over.")
+            return True
+        return False
+
+    def ai_advice(self):
+        print("\n💡 AI Life Mentor Advice:")
+        if self.energy < 30:
+            print("⚡ Consider resting or exercising lightly to boost energy.")
+        if self.focus < 30:
+            print("🧠 Try meditating or a relaxing activity to regain focus.")
+        if self.happiness < 30:
+            print("😊 Socialize or take a fun break to improve mood.")
+        if self.productivity < 20:
+            print("📚 Learning a new skill will increase productivity.")
+
+    def play(self):
+        print("=== AI Life Mentor – Optimize Your Day ===")
+        while True:
+            self.display_status()
+            self.choose_activity()
+            self.ai_advice()
+            if self.check_game_over():
+                print(f"\n🏆 Game Over! Total Productivity: {self.productivity}, Happiness: {self.happiness}")
+                break
+            self.day += 1
+            time.sleep(1)  # Small delay for readability
+
+# Run the game
+game = AILifeMentor()
+game.play()
