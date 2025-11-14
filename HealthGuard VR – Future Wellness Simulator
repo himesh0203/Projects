@@ -1,0 +1,87 @@
+import random
+import time
+
+class HealthGuard:
+    def __init__(self):
+        self.mental = 50
+        self.physical = 50
+        self.energy = 50
+        self.day = 1
+        self.points = 0
+
+    def display_status(self):
+        print(f"\n🗓️ Day {self.day} | Mental: {self.mental} | Physical: {self.physical} | Energy: {self.energy} | Wellness Points: {self.points}")
+
+    def choose_activity(self):
+        print("\nChoose an activity to boost your health and wellness:")
+        print("1. Meditation (+15 mental, -5 energy, +10 points)")
+        print("2. Exercise (+15 physical, -10 energy, +15 points)")
+        print("3. Work on tech project (+10 mental, -15 energy, +20 points)")
+        print("4. Rest (+20 energy, +5 mental, +5 physical)")
+
+        choice = input("Enter your choice (1-4): ")
+
+        if choice == "1":
+            self.mental += 15
+            self.energy -= 5
+            self.points += 10
+            print("🧘 You meditated and calmed your mind.")
+        elif choice == "2":
+            self.physical += 15
+            self.energy -= 10
+            self.points += 15
+            print("🏃 You exercised and strengthened your body.")
+        elif choice == "3":
+            self.mental += 10
+            self.energy -= 15
+            self.points += 20
+            print("💻 Tech project worked on! Mind sharp, energy reduced.")
+        elif choice == "4":
+            self.energy += 20
+            self.mental += 5
+            self.physical += 5
+            self.points += 5
+            print("😴 You rested. Energy replenished.")
+        else:
+            print("❌ Invalid choice, nothing happened.")
+
+        # Random life events
+        event = random.randint(1, 5)
+        if event == 1:
+            self.mental -= 10
+            print("⚠️ Unexpected stress! Mental health decreased.")
+        elif event == 2:
+            self.physical -= 10
+            print("⚠️ Minor injury! Physical health decreased.")
+
+        # Clamp values between 0-100
+        self.mental = max(0, min(100, self.mental))
+        self.physical = max(0, min(100, self.physical))
+        self.energy = max(0, min(100, self.energy))
+
+    def check_game_over(self):
+        if self.mental == 0:
+            print("\n💔 Mental burnout! Take a break and restart tomorrow.")
+            return True
+        if self.physical == 0:
+            print("\n⚠️ Physical collapse! You need rest immediately.")
+            return True
+        if self.energy == 0:
+            print("\n😴 Exhausted! Energy depleted. Rest to recover.")
+            return True
+        return False
+
+    def play(self):
+        print("=== 🌐 HealthGuard VR – Future Wellness Simulator 2028 🌐 ===")
+        while True:
+            self.display_status()
+            self.choose_activity()
+            if self.check_game_over():
+                print(f"🏆 Total Wellness Points: {self.points}")
+                break
+            self.day += 1
+            time.sleep(1)
+
+# Run the game
+game = HealthGuard()
+game.play()
