@@ -1,0 +1,81 @@
+import random
+import time
+
+class LifeOptimizer:
+    def __init__(self):
+        self.energy = 50
+        self.mind = 50
+        self.productivity = 0
+        self.day = 1
+
+    def display_status(self):
+        print(f"\n=== Day {self.day} Status ===")
+        print(f"Energy: {self.energy} | Mental Health: {self.mind} | Productivity Points: {self.productivity}")
+
+    def choose_activity(self):
+        print("\nChoose your daily activity:")
+        print("1. Exercise (+15 Energy, -5 Mind, +10 Productivity)")
+        print("2. Meditate (+10 Mind, -5 Energy, +5 Productivity)")
+        print("3. Learn a skill (+10 Productivity, -10 Energy, -5 Mind)")
+        print("4. Rest (+20 Energy, +10 Mind, 0 Productivity)")
+
+        choice = input("Enter 1-4: ")
+
+        if choice == '1':
+            self.energy += 15
+            self.mind -= 5
+            self.productivity += 10
+            print("🏃 You exercised! Energy up, slight mental fatigue.")
+        elif choice == '2':
+            self.mind += 10
+            self.energy -= 5
+            self.productivity += 5
+            print("🧘 You meditated! Mind is calmer.")
+        elif choice == '3':
+            self.productivity += 10
+            self.energy -= 10
+            self.mind -= 5
+            print("📚 You learned a skill! Productivity increased, but energy decreased.")
+        elif choice == '4':
+            self.energy += 20
+            self.mind += 10
+            print("😴 You rested! Energy and mind fully recovered.")
+        else:
+            print("❌ Invalid choice, nothing happened.")
+
+        # Clamp values between 0 and 100
+        self.energy = max(0, min(100, self.energy))
+        self.mind = max(0, min(100, self.mind))
+
+        # Random event
+        event = random.randint(1,5)
+        if event == 1:
+            self.mind -= 5
+            print("⚠️ Stressful news! Mind decreased slightly.")
+        elif event == 2:
+            self.energy -= 5
+            print("⚠️ Tiring commute! Energy decreased slightly.")
+
+    def check_game_over(self):
+        if self.energy <= 0:
+            print("\n💤 You collapsed from exhaustion! Game Over.")
+            return True
+        if self.mind <= 0:
+            print("\n💔 Mental burnout! Game Over.")
+            return True
+        return False
+
+    def play(self):
+        print("=== LifeOptimizer – Daily Habit RPG ===")
+        while True:
+            self.display_status()
+            self.choose_activity()
+            if self.check_game_over():
+                print(f"🏆 Total Productivity Points: {self.productivity}")
+                break
+            self.day += 1
+            time.sleep(1)  # Small delay for readability
+
+# Run the game
+game = LifeOptimizer()
+game.play()
