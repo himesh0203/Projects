@@ -1,0 +1,87 @@
+import random
+import time
+
+class SmartLifeSimulator:
+    def __init__(self):
+        self.energy = 50
+        self.focus = 50
+        self.productivity = 0
+        self.day = 1
+
+    def display_status(self):
+        print(f"\n=== Day {self.day} Status ===")
+        print(f"Energy: {self.energy} | Focus: {self.focus} | Productivity: {self.productivity}")
+
+    def choose_activity(self):
+        print("\nChoose an activity for today:")
+        print("1. Exercise (+15 Energy, -5 Focus, +10 Productivity)")
+        print("2. Meditate (+10 Focus, -5 Energy, +5 Productivity)")
+        print("3. Learn a new skill (+10 Productivity, -10 Energy, -5 Focus)")
+        print("4. Relax (+20 Energy, +10 Focus, 0 Productivity)")
+        print("5. Socialize (+5 Energy, +10 Focus, +5 Productivity)")
+
+        choice = input("Enter 1-5: ")
+
+        if choice == '1':
+            self.energy += 15
+            self.focus -= 5
+            self.productivity += 10
+            print("🏃 You exercised! Energy increased, focus slightly decreased.")
+        elif choice == '2':
+            self.focus += 10
+            self.energy -= 5
+            self.productivity += 5
+            print("🧘 You meditated! Focus increased, energy slightly decreased.")
+        elif choice == '3':
+            self.productivity += 10
+            self.energy -= 10
+            self.focus -= 5
+            print("📚 You learned a new skill! Productivity increased, energy and focus decreased.")
+        elif choice == '4':
+            self.energy += 20
+            self.focus += 10
+            print("😴 You relaxed! Energy and focus increased.")
+        elif choice == '5':
+            self.energy += 5
+            self.focus += 10
+            self.productivity += 5
+            print("🗣️ You socialized! Energy and focus increased slightly.")
+        else:
+            print("❌ Invalid choice, nothing happened.")
+
+        # Clamp values between 0 and 100
+        self.energy = max(0, min(100, self.energy))
+        self.focus = max(0, min(100, self.focus))
+
+        # Random events that simulate real life
+        event = random.randint(1, 5)
+        if event == 1:
+            self.focus -= 5
+            print("⚠️ Stressful situation! Focus decreased slightly.")
+        elif event == 2:
+            self.energy -= 5
+            print("⚠️ Busy commute! Energy decreased slightly.")
+
+    def check_game_over(self):
+        if self.energy <= 0:
+            print("\n💤 You collapsed from exhaustion! Game Over.")
+            return True
+        if self.focus <= 0:
+            print("\n💔 Mental burnout! Game Over.")
+            return True
+        return False
+
+    def play(self):
+        print("=== SmartLife Simulator – Optimize Your Day ===")
+        while True:
+            self.display_status()
+            self.choose_activity()
+            if self.check_game_over():
+                print(f"🏆 Total Productivity: {self.productivity}")
+                break
+            self.day += 1
+            time.sleep(1)  # small delay for readability
+
+# Run the game
+game = SmartLifeSimulator()
+game.play()
