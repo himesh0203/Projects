@@ -1,0 +1,89 @@
+import time
+import random
+
+class FocusQuest:
+    def __init__(self):
+        self.tasks = []
+        self.xp = 0
+        self.level = 1
+
+    def add_task(self):
+        task = input("\nEnter a task you want to complete: ")
+        if task.strip():
+            self.tasks.append({"task": task, "done": False})
+            print(f"🔥 Mission added: '{task}'")
+        else:
+            print("Task cannot be empty!")
+
+    def view_tasks(self):
+        if not self.tasks:
+            print("\nNo missions yet. Add one!")
+            return
+        print("\n📜 Your Missions:")
+        for i, t in enumerate(self.tasks, 1):
+            status = "✔ Done" if t["done"] else "⏳ Pending"
+            print(f"{i}. {t['task']} - {status}")
+
+    def complete_task(self):
+        self.view_tasks()
+        if not self.tasks:
+            return
+
+        try:
+            choice = int(input("\nEnter mission number to mark complete: "))
+            if 1 <= choice <= len(self.tasks):
+                if not self.tasks[choice - 1]["done"]:
+                    self.tasks[choice - 1]["done"] = True
+                    gained = random.randint(10, 30)
+                    self.xp += gained
+                    print(f"\n🎉 Mission Complete! You gained {gained} XP.")
+
+                    self.check_level_up()
+                else:
+                    print("Already completed!")
+            else:
+                print("Invalid mission number.")
+        except ValueError:
+            print("Enter a valid number!")
+
+    def check_level_up(self):
+        needed = self.level * 50
+        if self.xp >= needed:
+            self.level += 1
+            self.xp -= needed
+            print(f"\n🏆 LEVEL UP! You reached Level {self.level}!")
+            print(random.choice([
+                "Keep going, you're unstoppable!",
+                "Amazing! Your power grows!",
+                "Your productivity is leveling up IRL!",
+                "Great job! Let's complete another mission."
+            ]))
+
+    def main(self):
+        print("\n=== 🌟 FocusQuest – Turn Your Life Into a Game 🌟 ===")
+
+        while True:
+            print(f"\n🎮 Level: {self.level} | ⭐ XP: {self.xp}")
+            print("\nChoose an option:")
+            print("1. Add a Mission")
+            print("2. View Missions")
+            print("3. Complete a Mission")
+            print("4. Exit")
+
+            choice = input("\nEnter your choice: ")
+
+            if choice == "1":
+                self.add_task()
+            elif choice == "2":
+                self.view_tasks()
+            elif choice == "3":
+                self.complete_task()
+            elif choice == "4":
+                print("\n👋 Exiting FocusQuest. Keep improving every day!")
+                break
+            else:
+                print("Invalid choice. Try again.")
+
+
+game = FocusQuest()
+game.main()
